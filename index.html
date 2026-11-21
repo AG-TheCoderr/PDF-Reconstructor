@@ -2840,11 +2840,23 @@ async function ensureTesseract(onStatus) {
     onStatus && onStatus('Loading OCR engine (WASM)…');
     if (!window.Tesseract) await loadScript(CDN.tesseract, 60000);
     if (!window.Tesseract) throw new Error('Tesseract.js did not load. Check your connection and reload.');
+    // A CSP that omits blob: from worker-src / default-src breaks the
+    // cross-origin boot below, and the browser's own message is opaque.
+    if (typeof Worker === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+      throw new Error('This browser cannot start a background OCR worker. Try a current Chrome, Edge, Firefox or Safari.');
+    }
+    // workerBlobURL MUST stay true. With it false Tesseract does
+    //   new Worker('https://cdn.jsdelivr.net/.../worker.min.js')
+    // and a classic Worker cannot be constructed from a cross-origin script
+    // URL, so the browser throws
+    //   "Script at ... cannot be accessed from origin ..."
+    // and OCR never starts. With it true Tesseract wraps the CDN path in
+    // importScripts() inside a same-origin blob, which is allowed.
     const worker = await window.Tesseract.createWorker('eng', 1, {
       workerPath: CDN.tesseractWorker,
       corePath: CDN.tesseractCore,
       langPath: CDN.tesseractLang,
-      workerBlobURL: false,
+      workerBlobURL: true,
       logger: (m) => { state.ocrStatus = m; },
     });
     state.tesseract = worker;
