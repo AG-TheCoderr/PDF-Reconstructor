@@ -3276,17 +3276,24 @@ function detectGraphics(imgData, W, H, bg, words, lines, opts) {
  */
 function cleanCropAgainstVectors(gf, pageW, pageH, boxes, refImage) {
   const cw = gf.canvas.width, ch = gf.canvas.height;
+  const gw = pageW, gh = pageH;
   const scale = cw / Math.max(1, gf.w);
   const cx = ctxOf(gf.canvas);
   const img = cx.getImageData(0, 0, cw, ch);
   const d = img.data;
   const isInk = (i) => d[i + 3] > 12;
-  // Only *edge-touching* straight rules are duplicates of Layer-2 drawings.
-  // (Arrow shafts are also straight but must survive — they are artwork.)
+  /* Only *edge-touching* straight rules are duplicates of Layer-2 drawings.
+   * (Arrow shafts are also straight but must survive — they are artwork.)
+   *
+   * Small crops are exempt: a stamp's rectangular frame is four edge-touching
+   * straight lines, and wiping them leaves a dotted outline. A duplicate of a
+   * page-spanning table rule only appears in crops large enough to span it. */
+  const frameSafe = cw < gw * 0.5 && ch < gh * 0.5;
   let changed = false;
   const wipe = (x, y) => { const i = (y * cw + x) * 4; if (d[i + 3] > 0) { d[i + 3] = 0; changed = true; } };
-  const edgeRows = Math.max(2, Math.round(ch * 0.02));
-  const edgeCols = Math.max(2, Math.round(cw * 0.02));
+  let edgeRows = Math.max(2, Math.round(ch * 0.02));
+  let edgeCols = Math.max(2, Math.round(cw * 0.02));
+  if (frameSafe) { edgeRows = 0; edgeCols = 0; }
   for (let y = 0; y < ch; y++) {
     const nearEdgeY = y < edgeRows * 2 || y >= ch - edgeRows * 2;
     if (!nearEdgeY) continue;
@@ -3315,6 +3322,14 @@ function cleanCropAgainstVectors(gf, pageW, pageH, boxes, refImage) {
   }
   // Fill every transparent hole with the *reference* colour at that exact spot
   // (page paper or the local colour-region fill) — never a single global guess.
+  /* Record what was genuinely artwork before the hole-filling flood below makes
+   * every pixel opaque. Colour distance cannot recover this afterwards: artwork
+   * is often the same colour as the page behind it (a navy logo ring sits on a
+   * navy banner), and only the alpha channel knows the difference. */
+  const inkAlpha = new Uint8Array(cw * ch);
+  for (let i2 = 0, p2 = 3; i2 < cw * ch; i2++, p2 += 4) inkAlpha[i2] = d[p2];
+  gf.inkAlpha = inkAlpha;
+
   const sxScale = gf.w / cw, syScale = gf.h / ch;
   let bgFill = [255, 255, 255];
   if (!refImage) {
@@ -3349,7 +3364,56 @@ function cleanCropAgainstVectors(gf, pageW, pageH, boxes, refImage) {
     if (Math.abs(px[i] - bgFill[0]) + Math.abs(px[i + 1] - bgFill[1]) + Math.abs(px[i + 2] - bgFill[2]) > 40) ink++;
   }
   if (ink < 40) return null;
-  return { ...gf, canvas: gf.canvas };
+  return gf;
+}
+
+/**
+ * Record each crop's genuine artwork coverage.
+ *
+ * This must run BEFORE cleanCropAgainstVectors, which erases duplicate rules and
+ * then floods every transparent pixel with the page colour. By that point the
+ * canvas is fully opaque and the only evidence of what was artwork is gone.
+ * The alpha channel captured here is authoritative: artwork is often the same
+ * colour as the page behind it (the logo's navy ring sits on a navy banner), so
+ * colour distance can never recover it.
+ */
+function snapshotCropAlpha(gfx) {
+  for (const gf of gfx) {
+    const c = gf.canvas;
+    const cw = c.width, ch = c.height;
+    const d = ctxOf(c).getImageData(0, 0, cw, ch).data;
+    const a = new Uint8Array(cw * ch);
+    for (let i = 0, p = 3; i < cw * ch; i++, p += 4) a[i] = d[p];
+    gf.inkAlpha = a;
+  }
+}
+
+/**
+ * Restore the crop's transparency.
+ *
+ * The crop pipeline floods every transparent pixel with the page/reference
+ * colour and sets alpha to 255, so by this point the canvas is fully opaque and
+ * the artwork's original alpha is gone. Recomputing it from colour distance to
+ * the local background is required for two things: the tracer needs to know
+ * which pixels are ink, and rotated-text recovery needs to see the glyph shapes.
+ */
+function restoreCropAlpha(gf) {
+  const c = gf.canvas;
+  const cw = c.width, ch = c.height;
+  if (!gf.inkAlpha || gf.inkAlpha.length !== cw * ch) return gf;
+  const cx = ctxOf(c);
+  const img = cx.getImageData(0, 0, cw, ch);
+  const d = img.data;
+  // Restore the artwork's own coverage. Flood-filled background pixels become
+  // transparent again; genuine ink — including ink the same colour as the page
+  // behind it — keeps its opacity, so a navy ring on a navy banner survives.
+  for (let i = 0, p = 3; i < cw * ch; i++, p += 4) d[p] = gf.inkAlpha[i];
+  cx.putImageData(img, 0, 0);
+
+  let inkPx = 0;
+  for (let i = 3; i < d.length; i += 4 * 7) if (d[i] >= 40) inkPx++;
+  if (inkPx < 6) return null;
+  return gf;
 }
 
 /** Trim transparent margins from an RGBA canvas. */
@@ -3574,6 +3638,428 @@ function cropToPngDataUrl(canvas) {
 }
 
 /**
+ * Median colour of the darkest/most saturated pixels inside a word box — the
+ * ink core, ignoring anti-aliased edges and the background.
+ */
+function sampleWordColor(data, W, H, box, bg) {
+  const x0 = clamp(Math.floor(box.x), 0, W - 1), y0 = clamp(Math.floor(box.y), 0, H - 1);
+  const x1 = clamp(Math.ceil(box.x + box.w), x0 + 1, W), y1 = clamp(Math.ceil(box.y + box.h), y0 + 1, H);
+  const px = [];
+  const bgLum = lumOf(bg.r, bg.g, bg.b);
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * W + x) * 4;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const l = lumOf(r, g, b);
+      const dist = Math.abs(r - bg.r) + Math.abs(g - bg.g) + Math.abs(b - bg.b);
+      if (dist < 60) continue;
+      if (bgLum > 128 ? l > bgLum - 30 : l < bgLum + 30) continue;
+      px.push([l, r, g, b]);
+    }
+  }
+  if (px.length < 4) return null;
+  px.sort((a, b) => a[0] - b[0]);
+  // Take the ink core: the darkest (or lightest on a dark page) quartile.
+  const slice = bgLum > 128 ? px.slice(0, Math.max(1, Math.floor(px.length * 0.4)))
+                            : px.slice(-Math.max(1, Math.floor(px.length * 0.4)));
+  let r = 0, g = 0, b = 0;
+  for (const p of slice) { r += p[1]; g += p[2]; b += p[3]; }
+  return [Math.round(r / slice.length), Math.round(g / slice.length), Math.round(b / slice.length)];
+}
+
+/** Rough bold test for a word box: mean stroke ink density relative to its height. */
+function isBoxBold(data, W, H, box) {
+  const x0 = clamp(Math.floor(box.x), 0, W - 1), y0 = clamp(Math.floor(box.y), 0, H - 1);
+  const x1 = clamp(Math.ceil(box.x + box.w), x0 + 1, W), y1 = clamp(Math.ceil(box.y + box.h), y0 + 1, H);
+  const h = Math.max(1, y1 - y0);
+  let ink = 0, n = 0;
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const i = (y * W + x) * 4;
+      const l = lumOf(data[i], data[i + 1], data[i + 2]);
+      if (l < 140) ink++;
+      n++;
+    }
+  }
+  void H;
+  return n > 0 && ink / n > 0.22 + 12 / h;
+}
+
+/**
+ * Longest-edge angle of the crop's ink, in degrees. A rotated word or badge is
+ * a set of strokes lying along one direction; the dominant near-horizontal
+ * direction is the skew we need to undo before OCR.
+ */
+function estimateCropSkew(canvas) {
+  const W = canvas.width, H = canvas.height;
+  if (W < 14 || H < 10) return 0;
+  const d = ctxOf(canvas).getImageData(0, 0, W, H).data;
+
+  // Collect ink points (subsampled — a stamp has plenty).
+  const pts = [];
+  const step = Math.max(1, Math.round(Math.max(W, H) / 260));
+  for (let y = 0; y < H; y += step) {
+    for (let x = 0; x < W; x += step) {
+      if (d[(y * W + x) * 4 + 3] >= 128) pts.push(x, y);
+    }
+  }
+  const n = pts.length / 2;
+  if (n < 24) return 0;
+
+  // Projection-profile sharpness: rotate the ink by theta and bin by y. Text
+  // lies along its baseline, so the histogram is sharpest at the true angle.
+  const score = (deg) => {
+    const t = (deg * Math.PI) / 180;
+    const ct = Math.cos(t), st = Math.sin(t);
+    const bins = new Map();
+    for (let i = 0; i < pts.length; i += 2) {
+      const py = Math.round(-pts[i] * st + pts[i + 1] * ct);
+      bins.set(py, (bins.get(py) || 0) + 1);
+    }
+    let sum = 0, sum2 = 0;
+    for (const v of bins.values()) { sum += v; sum2 += v * v; }
+    return sum2 / Math.max(1, sum);
+  };
+
+  let best = 0, bestScore = -Infinity;
+  for (let deg = -20; deg <= 20; deg += 0.5) {
+    const sc = score(deg);
+    if (sc > bestScore) { bestScore = sc; best = deg; }
+  }
+  // Refine in 0.1° steps around the winner.
+  for (let deg = best - 0.6; deg <= best + 0.6; deg += 0.1) {
+    const sc = score(deg);
+    if (sc > bestScore + 1e-9) { bestScore = sc; best = deg; }
+  }
+  const at0 = score(0);
+  // Only report a skew when it clearly beats "no rotation".
+  if (bestScore < at0 * 1.18) return 0;
+  if (Math.abs(best) < 1.0 || Math.abs(best) > 22) return 0;
+  return Math.round(best * 10) / 10;
+}
+
+/** Erase recovered word boxes from a crop's alpha so artwork is not doubled. */
+function maskTextInCrop(gf, words) {
+  const c = gf.canvas;
+  const x = ctxOf(c);
+  const sx = c.width / Math.max(1, gf.w);
+  const sy = c.height / Math.max(1, gf.h);
+  x.save();
+  x.globalCompositeOperation = 'destination-out';
+  for (const w of words) {
+    const lx = (w.x - gf.x) * sx, ly = (w.y - gf.y) * sy;
+    x.fillRect(lx - 2, ly - 2, w.w * sx + 4, w.h * sy + 4);
+  }
+  x.restore();
+  // If almost nothing is left, skip tracing entirely.
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  let left = 0;
+  for (let i = 3; i < d.length; i += 4 * 17) if (d[i] >= 128) left++;
+  if (left < 8) gf.emptied = true;
+}
+
+/* ---------------------------------------------------------------------------
+ * 18b. VECTOR ARTWORK TRACING
+ *   Artwork is re-drawn as real filled paths, never pasted as a bitmap: the
+ *   brief is a fully typed, fully vector document. Palette-quantise the crop,
+ *   trace each ink colour into closed contours, simplify, and emit one filled
+ *   path per colour.
+ * ------------------------------------------------------------------------- */
+
+
+/**
+ * Trace a binary mask into closed outlines by following the "cracks" between
+ * ink and empty pixels on the integer lattice.
+ *
+ * Each boundary unit segment is oriented so the ink is always on the right
+ * (clockwise in a y-down coordinate system). That makes the segment set
+ * globally consistent: every lattice vertex has matching in/out degree, so the
+ * segments chain into exact closed loops. Outer outlines and interior holes come
+ * out with opposite winding, which the even-odd fill rule renders correctly.
+ *
+ * This is deliberately not a marching-squares triangulation: axis-aligned
+ * cracks reproduce rectangles and straight rules exactly after simplification.
+ */
+function traceMask(mask, W, H) {
+  /* Boundary "crack" tracer.
+   *
+   * Follows the unit steps between ink and empty pixels. Each step is oriented so
+   * the ink is on the right, which makes the segment set globally consistent:
+   * every lattice vertex has matching in/out degree, so segments chain into exact
+   * closed loops. Outer outlines and interior holes come out with opposite
+   * winding, which the even-odd fill rule renders correctly.
+   *
+   * Axis-aligned cracks are deliberate: after simplification they reproduce
+   * rectangles and straight rules exactly, with no resampling error.
+   */
+  const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? 0 : (mask[y * W + x] ? 1 : 0);
+
+  const startOf = new Map();
+  const vkey = (x, y) => y * (W + 2) + x;
+  const push = (x0, y0, x1, y1) => {
+    const k = vkey(x0, y0);
+    let a = startOf.get(k);
+    if (!a) { a = []; startOf.set(k, a); }
+    a.push([x0, y0, x1, y1]);
+  };
+
+  let count = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (!mask[y * W + x]) continue;
+      count++;
+      if (!at(x, y - 1)) push(x, y, x + 1, y);           // top    ->
+      if (!at(x + 1, y)) push(x + 1, y, x + 1, y + 1);   // right  v
+      if (!at(x, y + 1)) push(x + 1, y + 1, x, y + 1);   // bottom <-
+      if (!at(x - 1, y)) push(x, y + 1, x, y);           // left   ^
+    }
+  }
+  if (!count) return [];
+
+  const all = [];
+  for (const arr of startOf.values()) for (const s of arr) all.push(s);
+
+  const used = new Set();
+  const segKey = (s) => s[0] + ',' + s[1] + ',' + s[2] + ',' + s[3];
+  const loops = [];
+
+  for (let i = 0; i < all.length; i++) {
+    const seed = all[i];
+    if (used.has(segKey(seed))) continue;
+    const loop = [];
+    let cur = seed;
+    for (let guard = 0; guard <= all.length + 4; guard++) {
+      const k = segKey(cur);
+      if (used.has(k)) break;
+      used.add(k);
+      loop.push(cur[0], cur[1]);
+      const nxt = startOf.get(vkey(cur[2], cur[3]));
+      if (!nxt || !nxt.length) break;
+      let found = null;
+      for (const cand of nxt) {
+        if (!used.has(segKey(cand))) { found = cand; break; }
+      }
+      if (!found) break;
+      cur = found;
+      if (cur[0] === seed[0] && cur[1] === seed[1]) break;
+    }
+    if (loop.length >= 8) loops.push(loop);
+  }
+  return loops;
+}
+
+/**
+ * Douglas–Peucker polyline simplification. Keeps glyph corners while cutting
+ * the point count enough that a traced page stays small.
+ */
+function simplifyContour(pts, tol) {
+  const n = pts.length / 2;
+  if (n < 4) return pts.slice();
+  const keep = new Uint8Array(n);
+  keep[0] = 1; keep[n - 1] = 1;
+  const stack = [[0, n - 1]];
+  const t2 = tol * tol;
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    const ax = pts[a * 2], ay = pts[a * 2 + 1];
+    const bx = pts[b * 2], by = pts[b * 2 + 1];
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    let best = -1, bestD = t2;
+    for (let i = a + 1; i < b; i++) {
+      const qx = pts[i * 2], qy = pts[i * 2 + 1];
+      let d2;
+      if (len2 < 1e-12) {
+        d2 = (qx - ax) * (qx - ax) + (qy - ay) * (qy - ay);
+      } else {
+        let t = ((qx - ax) * dx + (qy - ay) * dy) / len2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const px = ax + t * dx, py = ay + t * dy;
+        d2 = (qx - px) * (qx - px) + (qy - py) * (qy - py);
+      }
+      if (d2 > bestD) { bestD = d2; best = i; }
+    }
+    if (best > 0) { keep[best] = 1; stack.push([a, best], [best, b]); }
+  }
+  const res = [];
+  for (let i = 0; i < n; i++) if (keep[i]) res.push(pts[i * 2], pts[i * 2 + 1]);
+  return res;
+}
+
+/** Shoelace area — used for tests and for rejecting sliver rings. */
+function contourSignedArea(pts) {
+  let a = 0;
+  const n = pts.length / 2;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    a += pts[i * 2] * pts[j * 2 + 1] - pts[j * 2] * pts[i * 2 + 1];
+  }
+  return a / 2;
+}
+
+/** Trace + simplify + drop slivers. Returns rings in mask pixel units. */
+function contoursToRings(contours, tol, minArea) {
+  const rings = [];
+  for (const c of contours) {
+    const simp = simplifyContour(c, tol);
+    if (simp.length < 6) continue;
+    if (Math.abs(contourSignedArea(simp)) < minArea) continue;
+    rings.push(simp);
+  }
+  return rings;
+}
+
+/**
+ * Emit rings as one filled PDF path. `toPt` maps mask pixels to page points.
+ * Even-odd fill punches interior holes correctly without reversing winding.
+ */
+function emitFilledRings(page, rings, toPt, color) {
+  if (!rings.length) return 0;
+  const { PDFOperator, PDFOperatorNames: N, PDFNumber } = window.PDFLib;
+  const op = (name, ...args) => PDFOperator.of(name, args.map((a) => (typeof a === 'number' ? PDFNumber.of(round4(a)) : a)));
+  const ops = [op(N.PushGraphicsState), op(N.NonStrokingColorRgb, color[0], color[1], color[2])];
+  let emitted = 0;
+  for (const ring of rings) {
+    const n = ring.length / 2;
+    if (n < 3) continue;
+    const p0 = toPt(ring[0], ring[1]);
+    ops.push(op(N.MoveTo, p0[0], p0[1]));
+    for (let i = 1; i < n; i++) {
+      const p = toPt(ring[i * 2], ring[i * 2 + 1]);
+      ops.push(op(N.LineTo, p[0], p[1]));
+    }
+    ops.push(op(N.ClosePath));
+    emitted++;
+  }
+  ops.push(op(N.FillEvenOdd), op(N.PopGraphicsState));
+  page.pushOperators(...ops);
+  return emitted;
+}
+
+/** Tight bounding box of the set pixels in a mask. */
+function maskBBox(mask, W, H) {
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) {
+    const base = y * W;
+    for (let x = 0; x < W; x++) {
+      if (mask[base + x]) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  if (x1 < 0) return null;
+  return { x0, y0, x1, y1 };
+}
+
+/**
+ * Vectorise the artwork inside a graphic crop into filled geometric shapes.
+ * The crop's dominant opaque colour is the page fill and is skipped; every
+ * other ink colour becomes one or more traced paths.
+ *
+ * Returns { shapes:[{rings,color,count}], ink, covered, palette } in crop px.
+ */
+function vectoriseCrop(crop) {
+  const W = crop.width, H = crop.height;
+  if (W < 3 || H < 3) return { shapes: [], ink: 0, covered: 0, palette: [] };
+  const ctx = ctxOf(crop);
+  const im = ctx.getImageData(0, 0, W, H);
+  const d = im.data;
+  const total = W * H;
+
+  // Low threshold: restoreCropAlpha gives anti-aliased stroke edges partial
+  // alpha, and clipping at 128 would erase thin signature/underline strokes.
+  const ink = new Uint8Array(total);
+  let inkCount = 0;
+  for (let i = 0, p = 3; i < total; i++, p += 4) {
+    if (d[p] >= 40) { ink[i] = 1; inkCount++; }
+  }
+  if (!inkCount) return { shapes: [], ink: 0, covered: 0, palette: [] };
+
+  // Quantise ink colours to a 4-bit-per-channel palette.
+  const buckets = new Map();
+  for (let i = 0, p = 0; i < total; i++, p += 4) {
+    if (!ink[i]) continue;
+    const k = ((d[p] >> 4) << 8) | ((d[p + 1] >> 4) << 4) | (d[p + 2] >> 4);
+    const e = buckets.get(k);
+    if (e) { e.n++; e.r += d[p]; e.g += d[p + 1]; e.b += d[p + 2]; }
+    else buckets.set(k, { n: 1, r: d[p], g: d[p + 1], b: d[p + 2] });
+  }
+
+  const palette = [...buckets.entries()]
+    .map(([k, e]) => ({ k, n: e.n, rgb: [Math.round(e.r / e.n), Math.round(e.g / e.n), Math.round(e.b / e.n)] }))
+    .sort((a, b) => b.n - a.n);
+
+  // Merge palette entries that are visually the same ink.
+  const groups = [];
+  for (const p of palette) {
+    let hit = null;
+    for (const g of groups) {
+      const c = g.rgb;
+      if (Math.abs(c[0] - p.rgb[0]) + Math.abs(c[1] - p.rgb[1]) + Math.abs(c[2] - p.rgb[2]) < 42) { hit = g; break; }
+    }
+    if (hit) {
+      const t = hit.n + p.n;
+      hit.rgb = [
+        Math.round((hit.rgb[0] * hit.n + p.rgb[0] * p.n) / t),
+        Math.round((hit.rgb[1] * hit.n + p.rgb[1] * p.n) / t),
+        Math.round((hit.rgb[2] * hit.n + p.rgb[2] * p.n) / t),
+      ];
+      hit.n = t;
+      hit.keys.push(p.k);
+    } else {
+      groups.push({ rgb: p.rgb, n: p.n, keys: [p.k] });
+    }
+  }
+  groups.sort((a, b) => b.n - a.n);
+
+  const tol = Math.max(0.7, Math.min(1.5, Math.max(W, H) / 700));
+  const minArea = Math.max(1.5, W * H * 0.00008);
+  const MAX_GROUPS = 6;
+  const shapes = [];
+  let covered = 0;
+
+  // groups[0] is the dominant colour = the page fill already painted underneath.
+  for (let gi = 1; gi < groups.length && gi < MAX_GROUPS; gi++) {
+    const grp = groups[gi];
+    const keySet = new Set(grp.keys);
+    const mask = new Uint8Array(total);
+    let n = 0;
+    for (let i = 0, p = 0; i < total; i++, p += 4) {
+      if (!ink[i]) continue;
+      const k = ((d[p] >> 4) << 8) | ((d[p + 1] >> 4) << 4) | (d[p + 2] >> 4);
+      let hit = keySet.has(k);
+      if (!hit) {
+        const c = grp.rgb;
+        hit = Math.abs(d[p] - c[0]) + Math.abs(d[p + 1] - c[1]) + Math.abs(d[p + 2] - c[2]) < 42;
+      }
+      if (hit) { mask[i] = 1; n++; }
+    }
+    if (n < 8) continue;
+
+    const bb = maskBBox(mask, W, H);
+    if (!bb) continue;
+
+    let rings;
+    if (bb.x1 - bb.x0 <= 1 || bb.y1 - bb.y0 <= 1) {
+      // 1px rule or tick: a traced rectangle would be degenerate — emit it flat.
+      rings = [[bb.x0, bb.y0, bb.x1 + 1, bb.y0, bb.x1 + 1, bb.y1 + 1, bb.x0, bb.y1 + 1]];
+    } else {
+      rings = contoursToRings(traceMask(mask, W, H), tol, minArea);
+    }
+    if (!rings.length) continue;
+
+    shapes.push({ rings, color: grp.rgb, count: n });
+    covered += n;
+  }
+
+  return { shapes, ink: inkCount, covered, palette: groups.slice(0, MAX_GROUPS).map((g) => g.rgb) };
+}
+
+
+/**
  * Assemble the final PDF from every page's reconstructed layers.
  * @returns {Promise<{bytes:Uint8Array, stats:object}>}
  */
@@ -3592,7 +4078,7 @@ async function assemblePdf(pages, options) {
     bold: (t) => naturalWidth(helvB, t),
   };
 
-  const stats = { words: 0, boxes: 0, lines: 0, graphics: 0, chars: 0, droppedText: 0 };
+  const stats = { words: 0, boxes: 0, lines: 0, graphics: 0, vectorPaths: 0, graphicsFlattened: 0, chars: 0, droppedText: 0 };
   const usedGlyphs = new Set();
 
   for (let pi = 0; pi < pages.length; pi++) {
@@ -3623,18 +4109,33 @@ async function assemblePdf(pages, options) {
       stats.boxes++;
     }
 
-    /* 3 — graphic crops (photos, logos, stamps) above their fills --------- */
+    /* 3 — artwork re-drawn as vectors (never pasted as a bitmap) ---------- */
     for (const gf of L.graphics) {
       try {
-        const dataUrl = cropToPngDataUrl(gf.canvas);
-        const png = await doc.embedPng(dataUrl);
-        page.drawImage(png, {
-          x: pxToPtX(g, gf.x), y: pxToPtY(g, gf.y + gf.h),
-          width: Math.max(0.2, gf.w * g.s), height: Math.max(0.2, gf.h * g.s),
-        });
-        stats.graphics++;
+        const traced = gf.vector;
+        if (!traced || !traced.shapes || !traced.shapes.length) {
+          // Nothing traceable (fully flat crop): the fill is already painted.
+          stats.graphicsFlattened++;
+          continue;
+        }
+        // Crop-local pixel -> page points.
+        const sx = (gf.w * g.s) / Math.max(1, gf.canvas.width);
+        const sy = (gf.h * g.s) / Math.max(1, gf.canvas.height);
+        const x0pt = pxToPtX(g, gf.x);
+        const y0pt = pxToPtY(g, gf.y + gf.h);
+        const toPt = (cx, cy) => [x0pt + cx * sx, y0pt + (gf.canvas.height - cy) * sy];
+        let drawn = 0;
+        for (const sh of traced.shapes) {
+          drawn += emitFilledRings(page, sh.rings, toPt, [
+            sh.color[0] / 255, sh.color[1] / 255, sh.color[2] / 255,
+          ]);
+        }
+        stats.vectorPaths += drawn;
+        if (drawn) stats.graphics++;
+        else stats.graphicsFlattened++;
       } catch (e) {
-        console.warn('Graphic embed failed', e);
+        console.warn('Artwork vectorisation failed', e);
+        stats.graphicsFlattened++;
       }
     }
 
@@ -3669,6 +4170,8 @@ async function assemblePdf(pages, options) {
       for (const w of arr) {
         const text = w.text;
         if (!text) continue;
+        // Text recovered from rotated artwork carries its own angle.
+        const wordAngle = (w.angleDeg !== undefined && w.angleDeg !== null) ? w.angleDeg : angle;
         const font = w.bold ? helvB : helv;
         const nat = (w.bold ? widths.bold : widths.regular)(text);
         let size = lineSizePx * g.s;
@@ -3690,9 +4193,27 @@ async function assemblePdf(pages, options) {
         const baseY = (w.baseline && isFinite(w.baseline.y0)) ? w.baseline.y0 : (w.y + w.h);
         // 4) optical alignment: pull left by the left side bearing of the first glyph
         const bearing = leftBearing(font, text) * size;
-        const xPt = pxToPtX(g, w.x) - bearing + (hScale < 1 ? (nat * size * (1 - hScale)) * 0 : 0);
-        const yPt = pxToPtY(g, baseY);
-        const col = [w.color[0] / 255, w.color[1] / 255, w.color[2] / 255];
+        let xPt = pxToPtX(g, w.x) - bearing;
+        let yPt = pxToPtY(g, baseY);
+        /* Rotated text was recovered from a crop, so its box is the axis-aligned
+         * bounds of a tilted line and the box origin is NOT the text origin.
+         * Pivot about the measured ink centre instead: the drawn string is
+         * centred on its origin (Tz taken into account), so rotating about the
+         * centre lands it back on the original slanted line. */
+        if (w.angleDeg !== undefined && w.angleDeg !== null && w.center) {
+          const rad = (wordAngle * Math.PI) / 180;
+          const drawnW = nat * size * hScale;
+          const halfW = drawnW / 2;
+          const cxPt = pxToPtX(g, w.center.x);
+          const cyPt = pxToPtY(g, w.center.y);
+          // Offset from the origin to the string centre, rotated into place.
+          const dx = -halfW * Math.cos(rad);
+          const dy = -halfW * Math.sin(rad) - size * 0.18;
+          xPt = cxPt + dx;
+          yPt = cyPt + dy;
+        }
+        const wc = (w.color && w.color.length >= 3) ? w.color : [0, 0, 0];
+        const col = [wc[0] / 255, wc[1] / 255, wc[2] / 255];
         if (!window.__drawLog) window.__drawLog = [];
         if (window.__drawLog.length < 500) window.__drawLog.push({ text, size: +size.toFixed(2), hScale: +hScale.toFixed(2), x: +xPt.toFixed(1), y: +yPt.toFixed(1), boxH: Math.round(w.h), boxW: Math.round(w.w), angle: +angle.toFixed(1) });
         let drawable = text;
@@ -3701,7 +4222,7 @@ async function assemblePdf(pages, options) {
           if (!drawable) { stats.droppedText++; continue; }
         }
         const ok = drawTextExact(page, font, fontKeyFor(font), {
-          text: drawable, x: xPt, y: yPt, size, rotateDeg: angle, hScale, color: col,
+          text: drawable, x: xPt, y: yPt, size, rotateDeg: wordAngle, hScale, color: col,
         });
         if (ok) { stats.words++; stats.chars += text.length; for (const ch of text) usedGlyphs.add(ch); }
         else stats.droppedText++;
@@ -3915,8 +4436,33 @@ async function runPipeline() {
       await nextFrame();
       let gfx = [];
       if (opts.graphics) {
-        // Words that will be re-typed must not leak into graphic crops.
+        // Text that will be re-typed must not leak into graphic crops. A rotated
+        // word's axis-aligned box does not cover its own ink (a stamp like PAID
+        // sits on a slanted baseline), so protect the whole line box too — that
+        // is the union of its words and never extends past real text.
         const typedBoxes = styled.words.map((w) => ({ x: w.x, y: w.y, w: w.w, h: w.h }));
+        {
+          const byLine = new Map();
+          for (const w of styled.words) {
+            const lb = w.lineBbox;
+            const k = lb
+              ? `${Math.round(lb.x0)},${Math.round(lb.y0)},${Math.round(lb.x1)},${Math.round(lb.y1)}`
+              : `solo-${Math.round(w.x)},${Math.round(w.y)}`;
+            let e = byLine.get(k);
+            if (!e) { e = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }; byLine.set(k, e); }
+            if (lb) {
+              e.x0 = Math.min(e.x0, lb.x0); e.y0 = Math.min(e.y0, lb.y0);
+              e.x1 = Math.max(e.x1, lb.x1); e.y1 = Math.max(e.y1, lb.y1);
+            } else {
+              e.x0 = Math.min(e.x0, w.x); e.y0 = Math.min(e.y0, w.y);
+              e.x1 = Math.max(e.x1, w.x + w.w); e.y1 = Math.max(e.y1, w.y + w.h);
+            }
+          }
+          for (const e of byLine.values()) {
+            if (!isFinite(e.x0)) continue;
+            typedBoxes.push({ x: e.x0, y: e.y0, w: e.x1 - e.x0, h: e.y1 - e.y0 });
+          }
+        }
         gfx = detectGraphics(d.img, d.W, d.H, d.bg, typedBoxes, lines, {
           whiten: opts.whiten,
           boxes,
@@ -3927,6 +4473,75 @@ async function runPipeline() {
         }).graphics;
       }
       gfx = gfx.map((g) => cleanCropAgainstVectors(g, d.W, d.H, boxes, refImg)).filter(Boolean);
+      gfx = gfx.map((g) => restoreCropAlpha(g)).filter(Boolean);
+
+      /* Rotated text recovery — a stamp or slanted badge is one tilted line, and
+       * its axis-aligned box cannot cover the ink, so the whole-page pass drops
+       * it. Re-read each crop de-rotated; anything readable becomes typed text
+       * and is cut out of the artwork so it is not drawn twice. */
+      if (opts.rotatedText !== false) {
+        for (const gf of gfx) {
+          try {
+            if (gf.canvas.width < 24 || gf.canvas.height < 14) continue;
+            const ang = estimateCropSkew(gf.canvas);
+            if (!ang) continue;
+            const scl = clamp(900 / Math.max(gf.canvas.width, gf.canvas.height), 1, 4);
+            const found = await ocrRotatedCrop(gf.canvas, ang, scl);
+            if (!found.length) continue;
+            const added = [];
+            for (const f of found) {
+              const px = gf.x + f.cx - f.w / 2;
+              const py = gf.y + f.cy - f.h / 2;
+              const dup = styled.words.some((w) => {
+                const ix = Math.min(px + f.w, w.x + w.w) - Math.max(px, w.x);
+                const iy = Math.min(py + f.h, w.y + w.h) - Math.max(py, w.y);
+                return ix > 0 && iy > 0 && (ix * iy) / Math.max(1, f.w * f.h) > 0.4;
+              });
+              if (dup) continue;
+              added.push({
+                text: f.text,
+                conf: f.conf,
+                x: px, y: py, w: f.w, h: f.h,
+                center: { x: gf.x + f.cx, y: gf.y + f.cy },
+                bbox: { x0: px, y0: py, x1: px + f.w, y1: py + f.h },
+                lineBbox: { x0: px, y0: py, x1: px + f.w, y1: py + f.h },
+                baseline: null,
+                rowAttributes: null,
+                angleDeg: ang,
+              });
+            }
+            if (added.length) {
+              /* If the words we just read cover most of the artwork, the crop
+               * existed only to carry that text (a stamp, a badge, a label).
+               * Keep the typed text and discard the artwork entirely, otherwise
+               * it renders twice: once as text and once as traced outlines. */
+              const cropArea = gf.w * gf.h;
+              const textArea = added.reduce((a, w) => a + w.w * w.h, 0);
+              if (textArea / Math.max(1, cropArea) > 0.28) {
+                gf.vector = null;
+                gf.emptied = true;
+                window.__cropDropped = (window.__cropDropped || 0) + 1;
+              }
+              // Recovered words need a colour: sample the ink core of each box.
+              for (const a of added) {
+                const box = { x: a.x, y: a.y, w: a.w, h: a.h, text: a.text };
+                a.color = sampleWordColor(d.data, d.W, d.H, box, d.bg) || [0, 0, 0];
+                a.bold = isBoxBold(d.data, d.W, d.H, box);
+              }
+              styled.words.push(...added);
+              window.__rotatedRecovered = (window.__rotatedRecovered || 0) + added.length;
+              // Cut the recovered words out of the artwork mask.
+              maskTextInCrop(gf, added);
+            }
+          } catch (err) { console.warn('rotated crop OCR failed', err); }
+        }
+      }
+
+      // Re-draw every crop as geometry instead of embedding it as an image.
+      for (const gf of gfx) {
+        if (gf.emptied) { gf.vector = null; continue; }
+        try { gf.vector = vectoriseCrop(gf.canvas); } catch (err) { gf.vector = null; }
+      }
       progress.chip('gfx', 'done');
       page.layers = { bg: d.bg, boxes, lines, words: styled.words, graphics: gfx, dropped: styled.dropped };
       page.analysis = { words: styled.words.length, boxes: boxes.length, lines: lines.length, graphics: gfx.length };
@@ -4006,6 +4621,117 @@ async function workerRecognize(ocrCanvas, overrides) {
   });
   const res = await worker.recognize(ocrCanvas, {}, { text: false, blocks: true });
   return (res && res.data) || {};
+}
+
+/**
+ * Read text that lives inside artwork — a rotated stamp, a badge, a label on a
+ * logo. The whole-page pass reports these as one slanted line whose axis-aligned
+ * box does not cover the ink, so the words are thrown away and the artwork gets
+ * traced as shapes. Re-running OCR on the de-rotated crop recovers them as real
+ * words so they can be TYPED, which is the point of the reconstruction.
+ *
+ * Returns words in page coordinates, with a rotation attached so the assembler
+ * can draw them at the original angle.
+ */
+async function ocrRotatedCrop(canvas, angleDeg, scale) {
+  if (!canvas || canvas.width < 8 || canvas.height < 8) return [];
+  const rad = (-angleDeg * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+  const outW = Math.ceil((canvas.width * cos + canvas.height * sin) * scale);
+  const outH = Math.ceil((canvas.width * sin + canvas.height * cos) * scale);
+
+  // Draw the crop de-rotated, opaque on white, so the ink lies horizontally.
+  const base = makeCanvas(outW, outH);
+  const bx = ctxOf(base);
+  bx.fillStyle = '#ffffff';
+  bx.fillRect(0, 0, outW, outH);
+  bx.imageSmoothingEnabled = true;
+  bx.imageSmoothingQuality = 'high';
+  bx.translate(outW / 2, outH / 2);
+  bx.rotate(rad);
+  bx.scale(scale, scale);
+  bx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+
+  /* Stamps are often pale ink on paper. Tesseract's binariser prefers strong
+   * contrast, so try a sweep of fixed thresholds and keep the most confident
+   * reading — that beats a single global guess on faint artwork. */
+  const lumData = bx.getImageData(0, 0, outW, outH);
+  const lum = lumData.data;
+  for (let i = 0; i < lum.length; i += 4) {
+    const v = 0.299 * lum[i] + 0.587 * lum[i + 1] + 0.114 * lum[i + 2];
+    lum[i] = lum[i + 1] = lum[i + 2] = v;
+    lum[i + 3] = 255;
+  }
+
+  const psm = canvas.height * scale >= 48 ? '4' : '6';
+  const variants = [];
+  for (const thr of [255, 165, 180, 195]) {
+    if (thr === 255) { variants.push(lumData); continue; }
+    const copy = new ImageData(new Uint8ClampedArray(lum), outW, outH);
+    const cd = copy.data;
+    for (let i = 0; i < cd.length; i += 4) {
+      const v = cd[i] < thr ? 0 : 255;
+      cd[i] = cd[i + 1] = cd[i + 2] = v;
+    }
+    variants.push(copy);
+  }
+
+  /* Cheap path first: read the plain de-rotated crop. Most artwork is either
+   * clearly legible or clearly not text, and this keeps the common case at a
+   * single OCR pass. Only escalate to binarised variants when nothing was read. */
+  let bestWords = [];
+  let bestScore = -1;
+  let bestCanvas = null;
+  for (let vi = 0; vi < variants.length; vi++) {
+    const variant = variants[vi];
+    const c = makeCanvas(outW, outH);
+    ctxOf(c).putImageData(variant, 0, 0);
+    let data;
+    try {
+      data = await workerRecognize(c, { tessedit_pageseg_mode: psm });
+    } catch (e) { continue; }
+    const found = collectRecognisedWords(data, outW, outH, scale, rad, canvas);
+    if (!found.length) continue;                       // keep going to next threshold
+    const conf = found.reduce((a, w) => a + w.conf, 0) / found.length;
+    const score = conf + found.reduce((a, w) => a + w.text.length, 0) * 4;
+    if (score > bestScore) { bestScore = score; bestWords = found; bestCanvas = c; }
+    // A confident read on the first variant needs no further work.
+    if (vi === 0 && conf >= 80 && found.length >= 1) break;
+  }
+  void bestCanvas;
+  return bestWords;
+}
+
+/** Pull words out of a Tesseract result and map them back into crop pixels. */
+function collectRecognisedWords(data, outW, outH, scale, rad, canvas) {
+  const blocks = (data && data.blocks) || [];
+  const found = [];
+  for (const block of blocks) {
+    for (const par of block.paragraphs || []) {
+      for (const line of par.lines || []) {
+        for (const word of line.words || []) {
+          const t = (word.text || '').trim();
+          if (!t || (word.confidence || 0) < 45) continue;
+          if (!/[A-Za-z0-9]{1,}/.test(t)) continue;
+          const cx = (word.bbox.x0 + word.bbox.x1) / 2 / scale - outW / 2 / scale;
+          const cy = (word.bbox.y0 + word.bbox.y1) / 2 / scale - outH / 2 / scale;
+          const a = -rad;
+          const rx = cx * Math.cos(a) - cy * Math.sin(a);
+          const ry = cx * Math.sin(a) + cy * Math.cos(a);
+          found.push({
+            text: t,
+            conf: word.confidence || 0,
+            cx: rx + canvas.width / 2,
+            cy: ry + canvas.height / 2,
+            w: (word.bbox.x1 - word.bbox.x0) / scale,
+            h: (word.bbox.y1 - word.bbox.y0) / scale,
+            baseline: line.baseline || null,
+          });
+        }
+      }
+    }
+  }
+  return found;
 }
 
 /**
@@ -4563,6 +5289,10 @@ window.Typecraft = {
   options: readOptions,
   drawInvoiceSample,
   drawWorksheetSample,
+  estimateCropSkew,
+  ocrRotatedCrop,
+  vectoriseCrop,
+  traceMask,
 };
 })();
 </script>
