@@ -1,10 +1,18 @@
-# Simple workflow for deploying static content to GitHub Pages
+# Deploy the static site to GitHub Pages.
+#
+# The app is a single self-contained index.html with no build step, so the job
+# publishes only the site files rather than the whole repository.
 name: Deploy static content to Pages
 
 on:
   # Runs on pushes targeting the default branch
   push:
     branches: ["main"]
+    # Docs-only edits do not change the site, so don't redeploy for them.
+    paths-ignore:
+      - "**/*.md"
+      - "LICENSE"
+      - ".gitignore"
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -15,8 +23,9 @@ permissions:
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+# Allow only one concurrent deployment, skipping runs queued between the run
+# in-progress and latest queued. However, do NOT cancel in-progress runs as we
+# want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -28,16 +37,33 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
+
+      # Stage the publishable site only. Publishing the repository root would
+      # also serve README.md (and any future notes) as public web pages.
+      - name: Stage site files
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp index.html _site/
+          # Fail loudly if the app is missing rather than deploying an empty site.
+          test -s _site/index.html
+          # Keep Pages from running Jekyll over the output.
+          touch _site/.nojekyll
+          printf 'Publishing:\n'
+          find _site -maxdepth 1 -type f -printf '  %f (%s bytes)\n' | sort
+
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
-          # Upload entire repository
-          path: '.'
+          path: "_site"
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
