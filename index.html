@@ -676,12 +676,12 @@ input[type="range"]:active::-webkit-slider-thumb{ transform: scale(1.12); }
             <label class="switch"><input type="checkbox" id="optLines" checked aria-label="Detect lines" /><span class="track"></span></label>
           </div>
           <div class="switch-row">
-            <div class="switch-copy"><b>Crop graphics</b><span>Logos, stamps, signatures</span></div>
-            <label class="switch"><input type="checkbox" id="optGraphics" checked aria-label="Crop graphics" /><span class="track"></span></label>
+            <div class="switch-copy"><b>Redraw artwork</b><span>Logos, stamps, signatures</span></div>
+            <label class="switch"><input type="checkbox" id="optGraphics" checked aria-label="Redraw artwork as vectors" /><span class="track"></span></label>
           </div>
           <div class="switch-row">
             <div class="switch-copy"><b>Whiten crops</b><span>Push near-white pixels to pure white</span></div>
-            <label class="switch"><input type="checkbox" id="optWhiten" checked aria-label="Whiten cropped graphics" /><span class="track"></span></label>
+            <label class="switch"><input type="checkbox" id="optWhiten" checked aria-label="Whiten redrawn artwork" /><span class="track"></span></label>
           </div>
           <div class="switch-row">
             <div class="switch-copy"><b>Fit text width</b><span>Scale type to match original span</span></div>
@@ -802,7 +802,7 @@ input[type="range"]:active::-webkit-slider-thumb{ transform: scale(1.12); }
       <section class="panel export-bar">
         <div class="export-info">
           <b>Download reconstructed PDF</b>
-          <span>Vector shapes, selectable type &amp; embedded crops · built entirely offline</span>
+          <span>Vector shapes, selectable type &amp; traced artwork · built entirely offline</span>
         </div>
         <div class="export-actions">
           <button class="btn-ghost" id="newTabBtn" type="button" disabled>
@@ -4432,7 +4432,7 @@ async function runPipeline() {
       progress.chip('text', 'done');
 
       progress.chip('gfx', 'active');
-      progress.set(60 + ((pi + 0.8) / state.pages.length) * 22, `Layer 4 · Cropping graphics — page ${pi + 1}/${state.pages.length}`);
+      progress.set(60 + ((pi + 0.8) / state.pages.length) * 22, `Layer 4 · Tracing artwork — page ${pi + 1}/${state.pages.length}`);
       await nextFrame();
       let gfx = [];
       if (opts.graphics) {
