@@ -1,0 +1,67 @@
+    <!-- ---------------- STAGE ---------------- -->
+    <section class="stage" aria-label="Previews and export">
+      <div class="preview-grid">
+        <!-- ORIGINAL -->
+        <section class="panel viewer" aria-label="Original document with detection overlay">
+          <div class="viewer-head">
+            <div class="viewer-title"><span class="swatch" style="background:var(--text-3)"></span>Original</div>
+            <div class="spacer"></div>
+            <div class="tool-group" role="group" aria-label="Overlay layers">
+              <button class="tool" id="tglBoxes" type="button" aria-pressed="true" title="Color regions (blue)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/></svg></button>
+              <button class="tool" id="tglLines" type="button" aria-pressed="true" title="Lines (green)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 17h16M9 4v16"/></svg></button>
+              <button class="tool" id="tglText" type="button" aria-pressed="true" title="Text boxes (orange)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6V4.5h14V6M12 4.5V19M9.5 19h5"/></svg></button>
+              <button class="tool" id="tglGfx" type="button" aria-pressed="true" title="Graphics (purple)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.8 6.4.6-4.8 4.2 1.4 6.2L12 16.7 6.4 19.8l1.4-6.2L3 9.4l6.4-.6z"/></svg></button>
+            </div>
+            <div class="tool-group" role="group" aria-label="Zoom">
+              <button class="tool" id="zoomOut" type="button" title="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M8.5 11h5"/></svg></button>
+              <span class="zoom-label" id="zoomLabel">fit</span>
+              <button class="tool" id="zoomIn" type="button" title="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M8.5 11h5M11 8.5v5"/></svg></button>
+            </div>
+          </div>
+          <div class="viewport" id="originalViewport">
+            <div class="viewport-inner" id="originalInner">
+              <canvas id="originalCanvas" width="900" height="620" aria-label="Original document"></canvas>
+            </div>
+            <div class="empty" id="originalEmpty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3" stroke-dasharray="3 3"/><path d="M12 8v8M8 12h8"/></svg>
+              <b>No document yet</b>
+              <span>Add a scan or load one of the built-in samples.</span>
+            </div>
+          </div>
+          <div class="viewer-foot">
+            <div class="legend">
+              <span><i style="background:var(--layer-bg)"></i>boxes</span>
+              <span><i style="background:var(--layer-line)"></i>lines</span>
+              <span><i style="background:var(--layer-text)"></i>text</span>
+              <span><i style="background:var(--layer-gfx)"></i>graphics</span>
+            </div>
+            <div class="spacer"></div>
+            <span id="originalMeta">—</span>
+          </div>
+        </section>
+
+        <!-- RECONSTRUCTED -->
+        <section class="panel viewer" aria-label="Reconstructed PDF preview">
+          <div class="viewer-head">
+            <div class="viewer-title"><span class="swatch" style="background:var(--accent-2)"></span>Reconstructed</div>
+            <div class="spacer"></div>
+            <div class="segmented" id="previewModeSeg" role="group" aria-label="Preview mode" style="padding:2px">
+              <button type="button" data-mode="render" aria-pressed="true">Rendered</button>
+              <button type="button" data-mode="text" aria-pressed="false">Text layer</button>
+            </div>
+          </div>
+          <div class="viewport" id="pdfViewport">
+            <canvas id="pdfCanvas" aria-label="Reconstructed PDF page preview"></canvas>
+            <div class="empty" id="pdfEmpty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9.5 12h6M9.5 15.5h6"/></svg>
+              <b>Your typed PDF appears here</b>
+              <span>Run the pipeline to see live vector output.</span>
+            </div>
+          </div>
+          <div class="viewer-foot">
+            <span id="pdfMeta">No PDF built yet</span>
+            <div class="spacer"></div>
+            <span id="pdfSize">—</span>
+          </div>
+        </section>
+      </div>
