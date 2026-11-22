@@ -29,7 +29,7 @@ function setBusy(busy) {
   TC.$('sampleInvoice').disabled = busy;
   TC.$('sampleWorksheet').disabled = busy;
   TC.$('fileClear').disabled = busy;
-  TC.$('runLabel').textContent = busy ? 'Reconstructing…' : 'Reconstruct PDF';
+  TC.$('runLabel').textContent = busy ? 'Rebuilding…' : 'Rebuild as PDF';
   const icon = run.querySelector('svg');
   let spin = run.querySelector('.spinner');
   if (busy && !spin) {

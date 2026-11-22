@@ -1,34 +1,95 @@
 /* ============================================================================
-   Media queries. All breakpoints live in one file so layout overrides stay auditable.
+   Responsive — all breakpoints in one file so overrides stay auditable.
+
+   Three states:
+     > 1100px  two columns, rail sticky
+     ≤ 1100px  single column, rail flows above the stage
+     ≤  720px  phone: tighter rhythm, proof pages stack, actions full width
    ========================================================================== */
 
 @media (max-width: 1100px){
   .workspace{ grid-template-columns: 1fr; }
-  .sidebar{ position:static; max-height:none; overflow:visible; }
+  .rail{
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    align-items: start;
+    gap: clamp(18px, 2.4vw, 30px);
+  }
+  /* On the wide single-column layout the run button and log stretch across. */
+  .rail > .rail-actions,
+  .rail > .rail-log{ grid-column: 1 / -1; }
+  .standfirst-facts{ flex: 1 1 100%; }
+}
+
+@media (max-width: 900px){
   .preview-grid{ grid-template-columns: 1fr; }
-  .hero{ align-items:flex-start; }
+  .proof-title::before{ display:none; }
 }
+
+/* Below 700px the four layer toggles + zoom will not fit beside the caption,
+   so the caption takes the full row and the tools sit underneath it. */
+@media (max-width: 700px){
+  .proof-head{ row-gap: 6px; }
+  .proof-title{ flex: 1 1 100%; }
+  .proof-head .spacer{ display:none; }
+  .proof-head .tool-group{ flex: 0 0 auto; }
+  .proof-head .zoom-label{ min-width: 26px; }
+  /* Both captions take the full first row, so the tools line up on the left
+     of row two in every panel. */
+  #previewModeSeg{ margin-left: 0; }
+}
+
 @media (max-width: 720px){
-  .topbar{ gap:10px; }
-  .brand-sub{ display:none; }
-  .privacy-pill{ display:none; }
-  .hero{ padding-top: 18px; }
-  .hero-stats{ width:100%; }
-  .stat{ flex:1 1 auto; min-width: 0; padding: 8px 11px; }
-  .stat b{ font-size:1rem; }
-  .export-bar{ padding: 12px; }
-  .export-actions{ width:100%; }
-  .btn-download{ width:100%; justify-content:center; }
-  .viewport{ min-height: 240px; max-height: 52vh; }
-  .toasts{ left: 12px; right: 12px; bottom: 12px; max-width:none; }
-  .viewer-head{ padding: 8px 10px; }
+  .masthead{ height: 54px; gap: 10px; }
+  .wordmark .descriptor{ display:none; }
+  .masthead-note{ display:none; }
+
+  .standfirst{ padding-top: 16px; gap: 16px; }
+  .standfirst-copy h1{ font-size: 1.35rem; max-width: none; }
+  .standfirst-copy p{ font-size: 12.5px; }
+  .standfirst-facts{ flex: 1 1 100%; }
+  .fact b{ font-size: 16px; }
+
+  .workspace{ padding-top: 14px; }
+  .rail{ grid-template-columns: 1fr; }
+
+  .output{ gap: 12px; }
+  .output-actions{ width: 100%; }
+  .btn-press{ flex: 1; justify-content: center; }
+
+  .ledger{ grid-template-columns: repeat(2, 1fr); }
+  .ledger .cell:nth-child(odd){ border-left: 0; padding-left: 0; }
+  .ledger .cell:nth-child(n+3){ border-top: 1px solid var(--rule); }
+
+  .viewport{ min-height: 240px; max-height: 54vh; padding: 8px; }
+  .proof-head{ gap: 6px; }
+  .toasts{ left: 12px; right: 12px; bottom: 12px; max-width: none; }
 }
+
 @media (max-width: 420px){
-  .brand-name .tag{ display:none; }
-  .brand-mark{ width:34px; height:34px; border-radius:10px; }
-  h1{ font-size:1.4rem; }
+  .wordmark .mark{ font-size: 21px; }
+  .masthead-icon{ width: 28px; height: 28px; }
+  .sample-row{ flex-direction: column; }
+  .tool-group .tool{ width: 27px; height: 25px; }
 }
+
+/* Respect the reader's motion preference. */
 @media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{ animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  *,*::before,*::after{
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
 }
-@media print{ body::before{ display:none; } .topbar,.sidebar,.hero,.footer,.toasts{ display:none !important; } }
+
+/* Printing shows the page, not the tool. */
+@media print{
+  body::before{ display:none; }
+  .masthead,.rail,.standfirst,.footer,.toasts,.output-actions,.proof-head .tool-group{ display:none !important; }
+  .workspace{ display:block; padding:0; border:0; }
+  .viewport{ max-height:none; border:0; background:none; }
+}

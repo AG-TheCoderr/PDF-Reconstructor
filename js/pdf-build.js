@@ -149,7 +149,7 @@ function consolidateWords(words) {
  * descender .211). Used to convert a tight ink box back into a font size.
  */
 function inkHeightPerEm(text) {
-  const hasCap = /[A-Z0-9£€TC.$@#%&]/.test(text);
+  const hasCap = /[A-Z0-9£€$@#%&]/.test(text);
   const hasAsc = /[bdfhklt]/.test(text);
   const hasDesc = /[gjpqyQ(),;]/.test(text);
   let r;

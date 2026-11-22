@@ -65,7 +65,9 @@ async function renderTextLayer() {
   if (!panel) {
     panel = document.createElement('div');
     panel.className = 'textlayer-panel';
-    panel.style.cssText = 'position:absolute;inset:10px;overflow:auto;padding:16px 18px;border-radius:10px;background:color-mix(in srgb, var(--bg-1) 97%, transparent);font-size:.78rem;line-height:1.75;white-space:pre-wrap;font-family:var(--font-mono);text-align:left;display:block;box-shadow:0 0 0 1px var(--line-2);';
+    // A solid sheet of paper, not a translucent tint: the faded PDF canvas
+    // underneath would otherwise show through the extracted text.
+    panel.style.cssText = 'position:absolute;inset:8px;overflow:auto;padding:18px 20px;border-radius:2px;background:var(--card);border:1px solid var(--rule-2);font-size:11.5px;line-height:1.85;white-space:pre-wrap;font-family:var(--font-mono);text-align:left;display:block;color:var(--ink);box-shadow:0 1px 2px var(--shade);';
     host.appendChild(panel);
   }
   panel.hidden = false;

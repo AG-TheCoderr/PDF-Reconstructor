@@ -19,7 +19,7 @@ function buildStyledWords(rawWords, mainData, W, H, pageBg, opts) {
     let cleaned = w.text.replace(/\s+/g, ' ').trim();
     if (/[A-Za-z0-9]/.test(cleaned)) {
       cleaned = cleaned.replace(/^[\u2190-\u21FF|¦\u00BB\u00AB\u203A\u2039\-–—=~_]+/, '')
-                       .replace(/[\u2190-\u21FF|¦\u00BB\u00AB\u203A\u2039=~_]+TC.$/, '')
+                       .replace(/[\u2190-\u21FF|¦\u00BB\u00AB\u203A\u2039=~_]+$/, '')
                        .trim();
     }
     cleaned = TC.sanitizeForWinAnsi(cleaned);

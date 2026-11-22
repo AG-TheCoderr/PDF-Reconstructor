@@ -76,6 +76,30 @@ Everything is verbatim HTML/CSS/JS. There is no bundler, no transpiler and no `n
 open `index.html` and it runs. The only thing that changes load order is the `<script>` list
 at the bottom of `index.html` — `js/runtime.js` first, `js/boot.js` last.
 
+### The interface
+
+The UI is styled as a **press proof sheet** rather than an app dashboard, because the tool
+turns a scan into typeset text and the visuals should say so:
+
+- **Paper, not glass.** Warm off-white stock (`--paper`), true ink (`--ink`), and depth from
+  hairlines and paper tone — there are no floating shadow cards, no gradients, no glow.
+- **Two typefaces with jobs.** Newsreader (a serif) carries headings, numbers and the wordmark;
+  Public Sans carries body copy, controls and labels. Both fall back to system serif/sans, so
+  the page still reads correctly offline.
+- **One accent.** Vermilion (`--accent`) marks only the things that produce output: the period
+  in the wordmark, the primary action, the current step. Everything else is ink or hairline.
+- **Rules as structure.** Sections open with a full-ink 1px rule and a small-caps label
+  (`.section-head`), the way a spec sheet or a table of figures does.
+- **Proof, not preview.** The two document panes are captioned *Original* and *Reconstructed*
+  and sit on a neutral bed, with the detection legend and page dimensions underneath.
+- **Switches are ticks.** Checkboxes draw a proof mark in a square, not a sliding pill.
+- **Dark mode is a dim proof**, warm and low-contrast, never blue-black.
+
+All tokens live in `css/tokens.css`; every other stylesheet reads from them, so retuning a
+colour or a radius there retunes the whole app. Two tokens are read by JavaScript at runtime
+and must keep their names: `--layer-bg`, `--layer-line`, `--layer-text`, `--layer-gfx`
+(the overlay colours in `js/overlay.js`).
+
 ### How the JavaScript is organised
 
 `js/runtime.js` defines a single global, `TC`. Every other file registers itself onto it:

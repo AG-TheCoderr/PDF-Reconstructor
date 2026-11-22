@@ -19,7 +19,7 @@ function syncRange(input, outId, digits = 2) {
 
 function downloadPdf() {
   if (!TC.state.pdfBytes) return;
-  const base = (TC.state.file && TC.state.file.name ? TC.state.file.name : 'document').replace(/\.[^.]+TC.$/, '').replace(/[^\w\-]+/g, '-');
+  const base = (TC.state.file && TC.state.file.name ? TC.state.file.name : 'document').replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '-');
   const a = document.createElement('a');
   const blob = new Blob([TC.state.pdfBytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
