@@ -1,98 +1,294 @@
 /* ============================================================================
-   The original / reconstructed preview pair, debug overlays, zoom and comparison controls.
+   Stage — the two proof viewers, their toolbars, the output bar and the run
+   ledger. Plus toasts.
+
+   The viewers are the heart of the page: two pages side by side on a neutral
+   bed, each under a ruled caption, like a before/after spread in a press
+   proof. Chrome around them is deliberately minimal so the document wins.
    ========================================================================== */
 
-.stage{ display:flex; flex-direction:column; gap: clamp(12px,1.6vw,20px); min-width:0; }
-.preview-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: clamp(10px,1.4vw,16px); min-width:0; }
-.viewer{ display:flex; flex-direction:column; min-width:0; }
-.viewer-head{
-  display:flex; align-items:center; gap:8px; padding: 10px 12px; border-bottom:1px solid var(--line-1); flex-wrap:wrap;
+/* ---------------------------------------------------------------------------
+   Proof pair
+   ------------------------------------------------------------------------ */
+.preview-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(14px, 1.6vw, 26px);
+  min-width:0;
 }
-.viewer-title{ display:flex; align-items:center; gap:8px; font-size:.8rem; font-weight:700; }
-.viewer-title .swatch{ width:8px; height:8px; border-radius:3px; flex:none; }
-.viewer-head .spacer{ flex:1; }
-.tool-group{ display:flex; gap:3px; padding:2px; border-radius:8px; background: var(--bg-3); border:1px solid var(--line-1); }
+
+.proof{
+  display:flex; flex-direction:column;
+  min-width:0;
+  border-top: 1px solid var(--rule-ink);
+}
+
+/* Caption bar above each page. */
+.proof-head{
+  display:flex; align-items:center; gap: 8px;
+  padding: 7px 0 8px;
+  flex-wrap:wrap;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 8px;
+}
+.proof-title{
+  display:flex; align-items:baseline; gap: 7px;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  white-space:nowrap;
+}
+/* A small rule before the label, instead of a coloured swatch. */
+.proof-title::before{
+  content:"";
+  width: 14px; height: 1px;
+  background: var(--ink);
+  align-self: center;
+  flex:none;
+}
+.proof-head .spacer{ flex:1; }
+
+/* Tool groups: hairline squares, pressed = filled. */
+.tool-group{
+  display:flex;
+  border:1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  overflow:hidden;
+  background: var(--card);
+}
 .tool{
-  width:27px; height:25px; display:grid; place-items:center; border:0; border-radius:6px;
-  background: transparent; color: var(--text-3); transition: all var(--dur) var(--ease);
+  width: 25px; height: 23px;
+  display:grid; place-items:center;
+  border:0;
+  background: transparent;
+  color: var(--ink-3);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.tool:hover{ color: var(--text-1); background: var(--bg-2); }
-.tool[aria-pressed="true"]{ background: var(--bg-1); color: var(--text-1); box-shadow: 0 1px 2px rgba(0,0,0,.3); }
-.tool svg{ width:14px; height:14px; }
-.zoom-label{ font-family: var(--font-mono); font-size:.66rem; color: var(--text-3); min-width:34px; text-align:center; font-variant-numeric: tabular-nums; }
+.tool + .tool{ border-left:1px solid var(--rule-2); }
+.tool:hover{ color: var(--ink); background: var(--paper-2); }
+.tool[aria-pressed="true"]{ background: var(--ink); color: var(--paper); }
+.tool svg{ width:12px; height:12px; }
+
+.zoom-label{
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--ink-3);
+  min-width: 30px;
+  text-align:center;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   Viewport: the bed the page sits on.
+   ------------------------------------------------------------------------ */
 .viewport{
-  position:relative; padding: clamp(8px,1.2vw,14px);
-  min-height: clamp(280px, 42vh, 520px); max-height: min(66vh, 680px);
-  overflow:auto; display:grid; place-items:center;
+  position:relative;
+  display:grid; place-items:center;
+  padding: clamp(10px, 1.2vw, 16px);
+  min-height: clamp(300px, 46vh, 560px);
+  max-height: min(68vh, 720px);
+  overflow:auto;
   background:
     linear-gradient(45deg, var(--checker-b) 25%, transparent 25%, transparent 75%, var(--checker-b) 75%),
     linear-gradient(45deg, var(--checker-b) 25%, var(--checker-a) 25%, var(--checker-a) 75%, var(--checker-b) 75%);
-  background-size: 22px 22px; background-position: 0 0, 11px 11px;
-  border-radius: 0 0 0 0;
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+  border:1px solid var(--rule);
+  border-radius: var(--r-sm);
 }
-.viewport-inner{ position:relative; line-height:0; transform-origin: center center; transition: width .18s var(--ease); max-width:100%; }
-.viewport canvas, .viewport img, .viewport iframe{ display:block; border-radius: 4px; background:#fff; box-shadow: 0 10px 30px -12px rgba(0,0,0,.55), 0 0 0 1px var(--line-2); }
-.viewport iframe{ width: 100%; height: 100%; border:0; }
-.viewer .empty{
-  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:9px; text-align:center; padding:24px; color: var(--text-3); pointer-events:none;
-  background: color-mix(in srgb, var(--bg-1) 55%, transparent);
+.viewport-inner{
+  position:relative;
+  line-height:0;
+  transform-origin: center center;
+  max-width:100%;
 }
-.viewer .empty svg{ width:34px; height:34px; opacity:.5; }
-.viewer .empty b{ font-size:.84rem; color: var(--text-2); font-weight:650; }
-.viewer .empty span{ font-size:.74rem; max-width: 26ch; }
-.viewer-foot{
-  display:flex; align-items:center; gap:8px; padding: 8px 12px; border-top:1px solid var(--line-1);
-  font-size:.68rem; color: var(--text-3); flex-wrap:wrap; min-height: 38px;
+/* The page itself: paper white, a hairline edge, and one soft lift. */
+.viewport canvas,
+.viewport img,
+.viewport iframe{
+  display:block;
+  border-radius: 1px;
+  background:#fff;
+  box-shadow: 0 1px 2px var(--shade), 0 10px 26px -14px var(--shade-2), 0 0 0 1px var(--shade);
 }
-.viewer-foot .spacer{ flex:1; }
-.legend{ display:flex; gap:9px; flex-wrap:wrap; }
-.legend span{ display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
-.legend i{ width:7px; height:7px; border-radius:2px; display:inline-block; }
+.viewport iframe{ width:100%; height:100%; border:0; }
 
-/* download bar */
-.export-bar{
-  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
-  padding: 13px 16px;
+/* Empty state: quiet, centred, no icon-in-a-box. */
+.proof .empty{
+  position:absolute; inset:0;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap: 6px;
+  padding: 24px;
+  text-align:center;
+  color: var(--ink-3);
+  pointer-events:none;
+  background: color-mix(in srgb, var(--card) 62%, transparent);
 }
-.export-info{ display:flex; flex-direction:column; gap:1px; min-width:0; flex:1; }
-.export-info b{ font-size:.84rem; font-weight:700; }
-.export-info span{ font-size:.72rem; color: var(--text-3); }
-.export-actions{ display:flex; gap:8px; flex-wrap:wrap; }
-.btn-download{
-  display:inline-flex; align-items:center; gap:8px; padding: 11px 18px; border-radius: 12px; border:0;
-  font-weight:700; font-size:.84rem; color: #06131a;
-  background: linear-gradient(100deg, #34d399, #22d3ee);
-  box-shadow: 0 10px 24px -12px rgba(34,211,238,.9), inset 0 1px 0 rgba(255,255,255,.35);
-  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), filter var(--dur) var(--ease);
+.proof .empty svg{
+  width: 26px; height: 26px;
+  opacity: .35;
+  margin-bottom: 4px;
 }
-.btn-download:hover:not(:disabled){ transform: translateY(-1px); box-shadow: 0 16px 30px -14px rgba(34,211,238,1); }
-.btn-download:disabled{ opacity:.45; cursor:not-allowed; filter: grayscale(.4); }
-.btn-download svg{ width:16px; height:16px; }
+.proof .empty b{
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.proof .empty span{
+  font-size: 11px;
+  max-width: 28ch;
+  line-height:1.5;
+}
 
-/* stats strip */
-.stats-strip{ display:grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 1px; background: var(--line-1); border-radius: var(--r-md); overflow:hidden; border:1px solid var(--line-1); }
-.stats-strip .cell{ background: color-mix(in srgb, var(--bg-1) 90%, transparent); padding: 10px 12px; display:flex; flex-direction:column; gap:1px; }
-.stats-strip .cell b{ font-size:1.02rem; font-weight:750; font-variant-numeric: tabular-nums; letter-spacing:-.02em; }
-.stats-strip .cell span{ font-size:.66rem; color: var(--text-3); text-transform:uppercase; letter-spacing:.06em; font-weight:650; }
+/* Foot: legend + meta, on a hairline. */
+.proof-foot{
+  display:flex; align-items:center; gap: 10px;
+  padding: 7px 0 0;
+  margin-top: 8px;
+  border-top: 1px solid var(--rule);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  min-height: 30px;
+  flex-wrap:wrap;
+}
+.proof-foot .spacer{ flex:1; }
 
-/* toast + error */
-.toasts{ position: fixed; right: 16px; bottom: 16px; z-index: 200; display:flex; flex-direction:column; gap:8px; max-width: min(360px, calc(100vw - 32px)); }
+.legend{ display:flex; gap: 11px; flex-wrap:wrap; }
+.legend span{ display:inline-flex; align-items:center; gap: 5px; white-space:nowrap; }
+.legend i{
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  display:inline-block;
+  flex:none;
+}
+
+/* The text-layer panel is created by js/preview.js with inline styles, so the
+   CSS only needs to make sure it sits above the faded canvas. */
+.textlayer-panel{ z-index: 2; }
+
+/* ---------------------------------------------------------------------------
+   Output bar — the "send to press" row.
+   ------------------------------------------------------------------------ */
+.output{
+  display:flex; align-items:center; gap: var(--s-4);
+  flex-wrap:wrap;
+  padding: clamp(14px, 1.6vw, 20px) 0;
+  border-top: 1px solid var(--rule-ink);
+}
+.output-copy{ flex:1 1 240px; min-width:0; }
+.output-copy b{
+  display:block;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 1px;
+}
+.output-copy span{
+  display:block;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.output-actions{ display:flex; gap: 8px; flex-wrap:wrap; align-items:center; }
+
+/* The download action is the second-darkest thing on the page. */
+.btn-press{
+  display:inline-flex; align-items:center; gap: 9px;
+  padding: 11px 18px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  transition: all var(--dur) var(--ease);
+}
+.btn-press:hover:not(:disabled){
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.btn-press:active:not(:disabled){ transform: translateY(1px); }
+.btn-press:disabled{
+  background: transparent;
+  border-color: var(--rule-2);
+  color: var(--ink-3);
+}
+.btn-press svg{ width:15px; height:15px; flex:none; }
+
+/* ---------------------------------------------------------------------------
+   Run ledger — the numbers of the last build, set like a table of figures.
+   ------------------------------------------------------------------------ */
+.ledger{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  border-top: 1px solid var(--rule-ink);
+  border-bottom: 1px solid var(--rule);
+}
+.ledger .cell{
+  padding: 10px 12px 11px 0;
+  display:flex; flex-direction:column; gap: 1px;
+  min-width:0;
+}
+.ledger .cell + .cell{
+  border-left: 1px solid var(--rule);
+  padding-left: 12px;
+}
+.ledger .cell b{
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.015em;
+}
+.ledger .cell span{
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* ---------------------------------------------------------------------------
+   Toasts — a slip of paper, bottom right, with an ink edge.
+   The app toggles .err and .out, and injects an <svg> from js/toast.js.
+   ------------------------------------------------------------------------ */
+.toasts{
+  position:fixed;
+  right: clamp(12px, 2vw, 24px);
+  bottom: clamp(12px, 2vw, 24px);
+  z-index:200;
+  display:flex; flex-direction:column; gap: 8px;
+  max-width: min(380px, calc(100vw - 24px));
+}
 .toast{
-  display:flex; gap:10px; padding: 11px 13px; border-radius: 12px; font-size:.79rem;
-  border:1px solid var(--line-2); background: var(--glass); backdrop-filter: blur(14px);
-  box-shadow: var(--shadow-2); animation: toast-in .3s var(--ease); color: var(--text-1);
+  display:flex; align-items:flex-start; gap: 9px;
+  padding: 10px 13px;
+  border:1px solid var(--rule-ink);
+  border-left-width: 3px;
+  border-radius: var(--r-xs);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 12px;
+  line-height:1.45;
+  box-shadow: 0 2px 4px var(--shade), 0 14px 36px -18px var(--shade-2);
+  animation: toast-in .22s var(--ease);
 }
-.toast.err{ border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
-.toast svg{ width:16px; height:16px; flex:none; margin-top:1px; }
-.toast.out{ animation: toast-out .25s var(--ease) forwards; }
-@keyframes toast-in{ from{ opacity:0; transform: translateY(10px) scale(.98); } }
-@keyframes toast-out{ to{ opacity:0; transform: translateY(6px) scale(.98); } }
-
-/* footer */
-.footer{
-  padding: 18px clamp(14px,2.4vw,28px) 26px; border-top:1px solid var(--line-1);
-  display:flex; align-items:center; gap:14px; flex-wrap:wrap; font-size:.73rem; color: var(--text-3);
-}
-.footer .spacer{ flex:1; }
-.footer strong{ color: var(--text-2); font-weight:650; }
+.toast svg{ width: 14px; height: 14px; flex:none; margin-top: 2px; color: var(--ok); }
+.toast.err{ border-left-color: var(--danger); }
+.toast.err svg{ color: var(--danger); }
+.toast.out{ animation: toast-out .2s var(--ease) forwards; }
+@keyframes toast-in{ from{ opacity:0; transform: translateY(8px); } }
+@keyframes toast-out{ to{ opacity:0; transform: translateY(4px); } }

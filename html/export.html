@@ -1,26 +1,27 @@
-      <section class="panel export-bar">
-        <div class="export-info">
-          <b>Download reconstructed PDF</b>
-          <span>Vector shapes, selectable type &amp; traced artwork · built entirely offline</span>
+      <!-- ---- Output ---- -->
+      <section class="output">
+        <div class="output-copy">
+          <b>Take the proof with you</b>
+          <span>Vector fills, traced artwork and selectable text — assembled in this tab, never uploaded.</span>
         </div>
-        <div class="export-actions">
-          <button class="btn-ghost" id="newTabBtn" type="button" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M19 14v5.5A1.5 1.5 0 0117.5 21h-13A1.5 1.5 0 013 19.5v-13A1.5 1.5 0 014.5 5H10"/></svg>
-            Open in tab
+        <div class="output-actions">
+          <button class="btn-line" id="newTabBtn" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 4H20v6.5M20 4l-8 8"/><path d="M18.5 14v5a1.5 1.5 0 01-1.5 1.5H5A1.5 1.5 0 013.5 19V7A1.5 1.5 0 015 5.5h5"/></svg>
+            Open in a tab
           </button>
-          <button class="btn-download" id="downloadBtn" type="button" disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M4.5 19h15"/></svg>
-            Download reconstructed PDF
+          <button class="btn-press" id="downloadBtn" type="button" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v11M7.5 10.5L12 15l4.5-4.5"/><path d="M4 20h16"/></svg>
+            Download PDF
           </button>
         </div>
       </section>
 
-      <div class="stats-strip" aria-label="Last run statistics">
-        <div class="cell"><b id="outWords">—</b><span>typed words</span></div>
-        <div class="cell"><b id="outBoxes">—</b><span>color regions</span></div>
-        <div class="cell"><b id="outLines">—</b><span>rules &amp; borders</span></div>
-        <div class="cell"><b id="outGfx">—</b><span>graphics</span></div>
-        <div class="cell"><b id="outTime">—</b><span>build time</span></div>
+      <!-- ---- Ledger: what the last build actually produced ---- -->
+      <div class="ledger" aria-label="Last build report">
+        <div class="cell"><b id="outWords">—</b><span>Words set</span></div>
+        <div class="cell"><b id="outBoxes">—</b><span>Colour regions</span></div>
+        <div class="cell"><b id="outLines">—</b><span>Rules &amp; borders</span></div>
+        <div class="cell"><b id="outGfx">—</b><span>Artwork pieces</span></div>
+        <div class="cell"><b id="outTime">—</b><span>Build time</span></div>
       </div>
     </section>
-  </main>

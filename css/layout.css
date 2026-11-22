@@ -1,108 +1,208 @@
 /* ============================================================================
-   Page structure: top bar, hero, the two-column workspace grid, and the footer.
+   Layout — masthead, workspace grid, footer.
+
+   The page is laid out like a printed sheet: a full-bleed masthead rule, then
+   a two-column body. The left column is the specification (what to build from,
+   how to build it); the right column is the press (proof pages and output).
+   The left column never scrolls away from you on desktop.
    ========================================================================== */
 
-.app{ position:relative; z-index:1; display:flex; flex-direction:column; min-height:100dvh; }
-.topbar{
+.app{
+  position:relative; z-index:1;
+  display:flex; flex-direction:column;
+  min-height:100dvh;
+  max-width: 1760px;
+  margin: 0 auto;
+}
+
+/* ---------------------------------------------------------------------------
+   Masthead
+   ------------------------------------------------------------------------ */
+.masthead{
+  display:flex; align-items:center; gap: var(--s-4);
+  padding: 0 clamp(16px, 2.6vw, 44px);
+  height: 62px;
+  border-bottom: 1px solid var(--rule-ink);
+  background: var(--paper);
   position: sticky; top:0; z-index:60;
-  display:flex; align-items:center; gap:16px;
-  padding: 12px clamp(14px, 2.4vw, 28px);
-  background: color-mix(in srgb, var(--bg-0) 78%, transparent);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  border-bottom: 1px solid var(--line-1);
 }
-.brand{ display:flex; align-items:center; gap:12px; min-width:0; }
-.brand-mark{
-  width:40px; height:40px; border-radius:12px; flex:none; position:relative;
-  background: conic-gradient(from 200deg, #7c6cff, #22d3ee, #7c6cff);
-  box-shadow: 0 8px 24px -10px rgba(124,108,255,.9), inset 0 0 0 1px rgba(255,255,255,.18);
-  display:grid; place-items:center;
+
+.wordmark{
+  display:flex; align-items:baseline; gap: 9px;
+  text-decoration:none; color: var(--ink); min-width:0;
 }
-.brand-mark svg{ width:22px; height:22px; display:block; }
-.brand-text{ min-width:0; }
-.brand-name{ font-weight: 750; letter-spacing:-.02em; font-size: 1.02rem; display:flex; align-items:center; gap:8px; line-height:1.15; }
-.brand-name .tag{
-  font-size:.62rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
-  padding: 2px 7px; border-radius:99px; color: var(--accent-2);
-  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-2) 30%, transparent);
+.wordmark .mark{
+  font-family: var(--font-serif);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: -.025em;
+  line-height:1;
   white-space:nowrap;
 }
-.brand-sub{ font-size:.74rem; color: var(--text-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.topbar-spacer{ flex:1; }
-.privacy-pill{
-  display:inline-flex; align-items:center; gap:7px; white-space:nowrap;
-  font-size:.74rem; font-weight:600; color: var(--text-2);
-  padding: 6px 11px; border-radius:99px;
-  border:1px solid var(--line-1); background: color-mix(in srgb, var(--bg-2) 60%, transparent);
+/* The period is the brand mark: the only always-vermilion dot on screen. */
+.wordmark .mark::after{ content: "."; color: var(--accent); }
+.wordmark .descriptor{
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: .02em;
+  color: var(--ink-3);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  padding-bottom: 2px;
 }
-.privacy-pill svg{ width:13px; height:13px; color: var(--ok); flex:none; }
-.icon-btn{
-  width:38px; height:38px; display:grid; place-items:center; flex:none;
-  border-radius: 11px; border:1px solid var(--line-1);
-  background: color-mix(in srgb, var(--bg-2) 70%, transparent);
-  color: var(--text-2);
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
-}
-.icon-btn:hover{ background: var(--bg-3); color: var(--text-1); border-color: var(--line-2); }
-.icon-btn:active{ transform: scale(.96); }
-.icon-btn svg{ width:18px; height:18px; }
-html[data-theme="dark"] .theme-sun{ display:block; } html[data-theme="dark"] .theme-moon{ display:none; }
-html[data-theme="light"] .theme-sun{ display:none; } html[data-theme="light"] .theme-moon{ display:block; }
+.masthead .spacer{ flex:1; }
 
-.hero{
-  padding: clamp(20px, 3.2vw, 40px) clamp(14px, 2.4vw, 28px) clamp(8px, 1.4vw, 16px);
-  display:flex; align-items:flex-end; gap: clamp(16px,3vw,48px); flex-wrap:wrap;
+/* Small status note, e.g. "runs in this tab". */
+.masthead-note{
+  display:inline-flex; align-items:center; gap: 7px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space:nowrap;
 }
-.hero-copy{ max-width: 760px; min-width: 260px; flex:1 1 420px; }
-.eyebrow{
-  display:inline-flex; align-items:center; gap:8px; margin-bottom:12px;
-  font-size:.72rem; font-weight:700; letter-spacing:.13em; text-transform:uppercase;
-  color: var(--accent-2);
+.masthead-note .dot{
+  width:6px; height:6px; border-radius:50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent);
+  flex:none;
 }
-.eyebrow::before{ content:""; width:22px; height:1px; background: currentColor; opacity:.6; }
-h1{
-  margin:0 0 10px; font-size: clamp(1.55rem, 3.1vw, 2.5rem); line-height:1.08;
-  letter-spacing:-.035em; font-weight: 800;
-  background: linear-gradient(100deg, var(--text-1) 30%, color-mix(in srgb, var(--text-1) 55%, var(--accent)) 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.hero p{ margin:0; color: var(--text-2); font-size: clamp(.9rem, .95vw, 1rem); max-width: 62ch; }
-.hero-stats{ display:flex; gap:10px; flex-wrap:wrap; }
-.stat{
-  min-width: 108px; padding: 10px 14px; border-radius: var(--r-md);
-  border:1px solid var(--line-1); background: color-mix(in srgb, var(--bg-2) 55%, transparent);
-  box-shadow: var(--shadow-1);
-}
-.stat b{ display:block; font-size:1.15rem; letter-spacing:-.02em; font-variant-numeric: tabular-nums; }
-.stat span{ font-size:.7rem; color: var(--text-3); text-transform:uppercase; letter-spacing:.07em; font-weight:600; }
 
+/* Masthead link buttons read as text, not as chrome. */
+.masthead-link{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--ink-2);
+  text-decoration:none;
+  padding: 6px 2px;
+  border-bottom: 1px solid transparent;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.masthead-link:hover{ color: var(--ink); border-bottom-color: var(--ink); }
+.masthead-link svg{ width:14px; height:14px; }
+.masthead-icon{
+  display:grid; place-items:center;
+  width:32px; height:32px; flex:none;
+  border:1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  transition: all var(--dur) var(--ease);
+}
+.masthead-icon:hover{ color: var(--ink); border-color: var(--ink); }
+.masthead-icon svg{ width:15px; height:15px; }
+html[data-theme="dark"] .theme-sun{ display:block; }
+html[data-theme="dark"] .theme-moon{ display:none; }
+html[data-theme="light"] .theme-sun{ display:none; }
+html[data-theme="light"] .theme-moon{ display:block; }
+
+/* ---------------------------------------------------------------------------
+   Standfirst — the one paragraph that explains the tool. Sits between the
+   masthead rule and the workspace, full width, and is deliberately quiet.
+   ------------------------------------------------------------------------ */
+.standfirst{
+  display:flex; align-items:baseline; gap: clamp(20px, 4vw, 64px);
+  flex-wrap:wrap;
+  padding: clamp(18px, 2.4vw, 30px) clamp(16px, 2.6vw, 44px) clamp(16px, 2vw, 26px);
+}
+.standfirst-copy{ flex: 1 1 480px; min-width: 280px; max-width: 82ch; }
+.standfirst-copy h1{
+  font-size: clamp(1.5rem, 2.5vw, 2.15rem);
+  line-height: 1.14;
+  letter-spacing: -.022em;
+  color: var(--ink);
+  margin-bottom: 10px;
+  max-width: 30ch;
+}
+.standfirst-copy h1 em{
+  font-style: italic;
+  color: var(--accent);
+}
+.standfirst-copy p{
+  color: var(--ink-2);
+  font-size: 13.5px;
+  max-width: 68ch;
+  line-height: 1.62;
+}
+/* Four one-line facts, separated by rules rather than boxed into cards. */
+.standfirst-facts{
+  display:flex; flex-wrap:wrap; gap: 0;
+  border-top: 1px solid var(--rule-ink);
+  border-bottom: 1px solid var(--rule);
+  flex: 0 1 340px;
+}
+.fact{
+  flex: 1 1 0; min-width: 74px;
+  padding: 9px 12px 9px 0;
+  display:flex; flex-direction:column; gap:1px;
+}
+.fact + .fact{ border-left:1px solid var(--rule); padding-left: 12px; }
+.fact b{
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 500;
+  line-height:1.15;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.fact span{
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Anchor targets (and anything scrolled to) clear the sticky masthead. */
+.stage, .rail, .proof, .preview-grid, .output, .ledger, .standfirst{
+  scroll-margin-top: 78px;
+}
+
+/* ---------------------------------------------------------------------------
+   Workspace
+   ------------------------------------------------------------------------ */
 .workspace{
-  flex:1; display:grid; gap: clamp(12px,1.6vw,20px);
-  grid-template-columns: minmax(300px, 372px) minmax(0,1fr);
-  padding: clamp(10px,1.6vw,20px) clamp(14px,2.4vw,28px) clamp(20px,3vw,36px);
+  flex:1;
+  display:grid;
+  grid-template-columns: minmax(316px, 366px) minmax(0, 1fr);
+  gap: clamp(20px, 2.4vw, 40px);
+  padding: 0 clamp(16px, 2.6vw, 44px) clamp(28px, 3vw, 44px);
   align-items:start;
+  border-top: 1px solid var(--rule);
+  padding-top: clamp(16px, 2vw, 26px);
 }
-.panel{
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line-1);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-1) 92%, transparent), color-mix(in srgb, var(--bg-1) 78%, transparent));
-  box-shadow: var(--shadow-1);
-  overflow: clip;
-}
-.panel-head{
-  display:flex; align-items:center; gap:10px; padding: 14px 16px;
-  border-bottom:1px solid var(--line-1);
-}
-.panel-head h2{ margin:0; font-size:.86rem; font-weight:700; letter-spacing:.01em; display:flex; align-items:center; gap:8px; }
-.panel-head .count{
-  font-size:.68rem; font-weight:700; padding:1px 7px; border-radius:99px;
-  background: var(--bg-3); color: var(--text-2); font-variant-numeric: tabular-nums;
-}
-.panel-head .spacer{ flex:1; }
-.panel-body{ padding: 14px 16px 16px; }
 
-/* Sidebar */
-.sidebar{ position: sticky; top: 78px; display:flex; flex-direction:column; gap: clamp(12px,1.6vw,20px); max-height: calc(100dvh - 92px); overflow-y:auto; padding-right: 2px; }
-@media (min-width: 1101px){ .sidebar{ scrollbar-gutter: stable; } }
+/* Left column: sticky so the controls stay reachable while proofing. */
+.rail{
+  position: sticky;
+  top: 78px;
+  display:flex; flex-direction:column; gap: clamp(18px, 2vw, 26px);
+  max-height: calc(100dvh - 96px);
+  overflow-y:auto;
+  padding-right: 4px;
+  padding-bottom: 2px;
+}
+@media (min-width: 1101px){ .rail{ scrollbar-gutter: stable; } }
+
+/* Right column */
+.stage{
+  display:flex; flex-direction:column;
+  gap: clamp(18px, 2vw, 26px);
+  min-width:0;
+}
+
+/* ---------------------------------------------------------------------------
+   Footer
+   ------------------------------------------------------------------------ */
+.footer{
+  display:flex; align-items:center; gap: var(--s-4); flex-wrap:wrap;
+  padding: var(--s-4) clamp(16px, 2.6vw, 44px) var(--s-5);
+  border-top: 1px solid var(--rule-ink);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.footer .spacer{ flex:1; }
+.footer .stamp{
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--ink-2);
+}

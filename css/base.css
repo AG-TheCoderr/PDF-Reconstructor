@@ -1,36 +1,198 @@
 /* ============================================================================
-   Reset, base typography, and shared primitives (buttons, chips, switches, scrollbars, toasts).
+   Base — reset, typography, and the small shared primitives
+   (buttons, inputs, focus, scrollbars, screen-reader text).
+
+   Rules of this design:
+     · no global shadows; depth comes from hairlines and paper tone
+     · borders are 1px and always a token
+     · headings are serif, body and controls are sans
    ========================================================================== */
 
 *,*::before,*::after{ box-sizing: border-box; }
 html,body{ height:100%; }
+
 body{
   margin:0;
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-sans);
-  background:
-    radial-gradient(1100px 520px at 12% -10%, rgba(124,108,255,.16), transparent 60%),
-    radial-gradient(900px 460px at 92% -6%, rgba(34,211,238,.10), transparent 55%),
-    var(--bg-0);
-  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  line-height:1.5;
-  min-height:100dvh;
+  min-height: 100dvh;
 }
+
+/* A single hairline of paper texture. Subtle enough to read as stock, not noise. */
 body::before{
-  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
-  background-image: radial-gradient(rgba(148,163,214,.055) 1px, transparent 1.2px);
-  background-size: 22px 22px;
-  mask-image: radial-gradient(1200px 700px at 50% 0%, #000 0%, transparent 75%);
+  content:"";
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background-image: radial-gradient(var(--rule) .5px, transparent .9px);
+  background-size: 4px 4px;
+  opacity:.30;
+  mask-image: linear-gradient(180deg, #000, transparent 42%);
 }
-::selection{ background: rgba(124,108,255,.4); }
-button,input,select{ font: inherit; color: inherit; }
-button{ cursor:pointer; }
-a{ color: var(--accent-2); }
-:focus-visible{ outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+h1,h2,h3,h4{ font-family: var(--font-serif); font-weight: 500; letter-spacing:-.01em; margin:0; }
+p{ margin:0; }
+
+button,input,select,textarea{ font:inherit; color:inherit; }
+button{ cursor:pointer; background:none; border:0; padding:0; }
+button:disabled{ cursor:not-allowed; }
+a{ color: var(--accent); text-underline-offset: 2px; }
+
+::selection{ background: var(--accent-soft); color: var(--ink); }
+
+:focus-visible{
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 [hidden]{ display:none !important; }
-.sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+
+.sr-only{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+}
+
+/* ---------------------------------------------------------------------------
+   Eyebrow / caption / meta — the three text voices used everywhere.
+   ------------------------------------------------------------------------ */
+.eyebrow{
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.caption{
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.45;
+}
+
+.num{
+  font-family: var(--font-serif);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -.01em;
+}
+
+/* ---------------------------------------------------------------------------
+   Rules — the structural device of this design.
+   ------------------------------------------------------------------------ */
+.rule{ height:1px; background: var(--rule); border:0; margin:0; }
+.rule-ink{ height:1px; background: var(--rule-ink); border:0; margin:0; }
+
+/* A section opener: ink rule above, small caps label, optional right-hand meta. */
+.section-head{
+  display:flex; align-items:center; gap: var(--s-3);
+  padding: 0 0 var(--s-2);
+  border-bottom: 1px solid var(--rule-ink);
+  margin-bottom: var(--s-3);
+}
+.section-head h2{
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  white-space:nowrap;
+}
+.section-head .spacer{ flex:1; }
+.section-head .meta{
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space:nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------------------ */
+
+/* Primary: a solid slab. Vermilion, because this is the one action that
+   produces the deliverable; everything else is ink or hairline. */
+.btn-ink{
+  display:inline-flex; align-items:center; justify-content:center; gap: 9px;
+  width:100%;
+  padding: 13px 16px;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: .015em;
+  border: 1px solid var(--accent);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.btn-ink:hover:not(:disabled){ background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.btn-ink:active:not(:disabled){ transform: translateY(1px); }
+.btn-ink:disabled{ background: transparent; color: var(--ink-3); border-color: var(--rule-2); }
+.btn-ink svg{ width:15px; height:15px; flex:none; }
+
+/* Secondary: hairline outline that fills on hover. */
+.btn-line{
+  display:inline-flex; align-items:center; justify-content:center; gap: 8px;
+  padding: 9px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--rule-2);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 550;
+  transition: all var(--dur) var(--ease);
+}
+.btn-line:hover:not(:disabled){ border-color: var(--ink); color: var(--ink); background: var(--card); }
+.btn-line:disabled{ opacity:.45; }
+.btn-line svg{ width:14px; height:14px; flex:none; }
+
+/* Icon button: square, hairline, ink on hover. */
+.btn-icon{
+  display:grid; place-items:center;
+  width:32px; height:32px; flex:none;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+  transition: all var(--dur) var(--ease);
+}
+.btn-icon:hover:not(:disabled){ border-color: var(--ink); color: var(--ink); background: var(--card); }
+.btn-icon svg{ width:15px; height:15px; }
+.btn-icon:disabled{ opacity:.4; }
+
+/* ---------------------------------------------------------------------------
+   Inputs
+   ------------------------------------------------------------------------ */
+input[type="text"], input[type="number"]{
+  width:100%;
+  padding: 9px 11px;
+  background: var(--card);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: 13px;
+  transition: border-color var(--dur) var(--ease);
+}
+input[type="text"]:focus, input[type="number"]:focus{ outline:none; border-color: var(--ink); }
+
+/* ---------------------------------------------------------------------------
+   Scrollbars — thin, ink-toned, never a coloured pill.
+   ------------------------------------------------------------------------ */
 *{ scrollbar-width: thin; scrollbar-color: var(--scroll) transparent; }
-*::-webkit-scrollbar{ width:10px; height:10px; }
-*::-webkit-scrollbar-thumb{ background: var(--scroll); border-radius:99px; border:3px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar{ width:9px; height:9px; }
+*::-webkit-scrollbar-thumb{
+  background: var(--scroll);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
 *::-webkit-scrollbar-track{ background: transparent; }
