@@ -1,7 +1,8 @@
 # Deploy the static site to GitHub Pages.
 #
-# The app is a single self-contained index.html with no build step, so the job
-# publishes only the site files rather than the whole repository.
+# The app is plain HTML/CSS/JS with no build step, so the job publishes the site
+# files (index.html plus the css/, html/ and js/ folders) rather than the whole
+# repository.
 name: Deploy static content to Pages
 
 on:
@@ -52,12 +53,19 @@ jobs:
           set -euo pipefail
           mkdir -p _site
           cp index.html _site/
-          # Fail loudly if the app is missing rather than deploying an empty site.
+          # The app is split into these folders; index.html references them by
+          # relative path, so the whole tree has to ship.
+          cp -R css html js _site/
+          # Fail loudly if any part of the app is missing rather than deploying
+          # a half-broken site.
           test -s _site/index.html
+          test -s _site/css/tokens.css
+          test -s _site/js/runtime.js
+          test -s _site/js/boot.js
           # Keep Pages from running Jekyll over the output.
           touch _site/.nojekyll
           printf 'Publishing:\n'
-          find _site -maxdepth 1 -type f -printf '  %f (%s bytes)\n' | sort
+          find _site -type f -printf '  %p (%s bytes)\n' | sort
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5

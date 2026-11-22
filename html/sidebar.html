@@ -1,0 +1,132 @@
+    <!-- ---------------- SIDEBAR ---------------- -->
+    <aside class="sidebar" aria-label="Upload and controls">
+      <section class="panel">
+        <div class="panel-head"><h2>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4 15v3.5A1.5 1.5 0 005.5 20h13a1.5 1.5 0 001.5-1.5V15"/></svg>
+          Source document</h2><div class="spacer"></div><span class="count" id="sourceBadge">none</span></div>
+        <div class="panel-body">
+          <button class="dropzone" id="dropzone" type="button" aria-describedby="dzSub">
+            <div class="dz-inner">
+              <div class="dz-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15.5l-4.6-4.6L7 20"/></svg>
+              </div>
+              <div class="dz-title" id="dzTitle">Drop a scan here or <em>choose a file</em></div>
+              <div class="dz-sub" id="dzSub">PNG, JPG, WEBP, BMP, GIF or a single-page PDF</div>
+              <div class="dz-formats"><span class="chip">PNG</span><span class="chip">JPG</span><span class="chip">WEBP</span><span class="chip">PDF</span></div>
+            </div>
+            <div class="dz-progress" id="dropProgress" hidden><i id="dropProgressBar"></i></div>
+          </button>
+          <input type="file" id="fileInput" class="sr-only" accept="image/png,image/jpeg,image/webp,image/bmp,image/gif,application/pdf,.pdf,.png,.jpg,.jpeg,.webp" />
+          <div class="sample-row">
+            <button class="btn-sample" id="sampleInvoice" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4"/><path d="M9 11h7M9 14.5h7M9 18h4"/></svg>
+              Sample invoice
+            </button>
+            <button class="btn-sample" id="sampleWorksheet" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9.5h18M9 9.5V20M15 9.5V20M3 15h18"/></svg>
+              Sample worksheet
+            </button>
+          </div>
+          <div id="fileCard" hidden style="margin-top:10px">
+            <div class="file-card">
+              <div class="file-thumb"><img id="fileThumb" alt="" /></div>
+              <div class="file-meta">
+                <div class="file-name" id="fileName">—</div>
+                <div class="file-dims" id="fileDims">—</div>
+              </div>
+              <button class="icon-btn file-clear" id="fileClear" type="button" title="Remove file" aria-label="Remove file">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+          Pipeline tuning</h2><div class="spacer"></div><span class="count">live</span></div>
+        <div class="panel-body control-grid">
+          <div class="control">
+            <div class="control-top"><span class="control-label">Contrast boost <span class="hint">pre-OCR enhance</span></span><span class="control-val" id="contrastVal">0.35</span></div>
+            <input type="range" id="contrast" min="0" max="1" step="0.05" value="0.35" aria-label="Contrast boost" />
+          </div>
+          <div class="control">
+            <div class="control-top"><span class="control-label">Line sensitivity <span class="hint">rule detection</span></span><span class="control-val" id="lineVal">0.55</span></div>
+            <input type="range" id="lineSens" min="0.15" max="1" step="0.05" value="0.55" aria-label="Line detection sensitivity" />
+          </div>
+          <div class="control">
+            <div class="control-top"><span class="control-label">Min OCR confidence</span><span class="control-val" id="confVal">45</span></div>
+            <input type="range" id="minConf" min="0" max="95" step="5" value="45" aria-label="Minimum OCR confidence" />
+          </div>
+          <div class="control">
+            <div class="control-top"><span class="control-label">Page size</span></div>
+            <div class="segmented" id="pageSizeSeg" role="group" aria-label="Page size">
+              <button type="button" data-size="exact" aria-pressed="true" title="Exact image aspect ratio">Exact</button>
+              <button type="button" data-size="a4" aria-pressed="false" title="Fit to A4 portrait">A4</button>
+              <button type="button" data-size="letter" aria-pressed="false" title="Fit to US Letter">Letter</button>
+            </div>
+          </div>
+          <div class="switch-row">
+            <div class="switch-copy"><b>Color regions</b><span>Banners, callouts &amp; table fills</span></div>
+            <label class="switch"><input type="checkbox" id="optColorBoxes" checked aria-label="Detect color regions" /><span class="track"></span></label>
+          </div>
+          <div class="switch-row">
+            <div class="switch-copy"><b>Lines &amp; borders</b><span>Rules, dividers, table grid</span></div>
+            <label class="switch"><input type="checkbox" id="optLines" checked aria-label="Detect lines" /><span class="track"></span></label>
+          </div>
+          <div class="switch-row">
+            <div class="switch-copy"><b>Redraw artwork</b><span>Logos, stamps, signatures</span></div>
+            <label class="switch"><input type="checkbox" id="optGraphics" checked aria-label="Redraw artwork as vectors" /><span class="track"></span></label>
+          </div>
+          <div class="switch-row">
+            <div class="switch-copy"><b>Whiten crops</b><span>Push near-white pixels to pure white</span></div>
+            <label class="switch"><input type="checkbox" id="optWhiten" checked aria-label="Whiten redrawn artwork" /><span class="track"></span></label>
+          </div>
+          <div class="switch-row">
+            <div class="switch-copy"><b>Fit text width</b><span>Scale type to match original span</span></div>
+            <label class="switch"><input type="checkbox" id="optFitText" checked aria-label="Fit text width to original" /><span class="track"></span></label>
+          </div>
+          <div class="control">
+            <div class="control-top"><span class="control-label">Bold threshold <span class="hint">stroke density</span></span><span class="control-val" id="boldVal">0.34</span></div>
+            <input type="range" id="boldThresh" min="0.2" max="0.6" step="0.02" value="0.34" aria-label="Bold detection threshold" />
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-body">
+          <div class="actions">
+            <button class="btn-primary" id="runBtn" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4.5-1.2L20 7.3a2.1 2.1 0 000-3l-.3-.3a2.1 2.1 0 00-3 0L5.2 15.5z"/><path d="M14.5 5.5l4 4"/></svg>
+              <span id="runLabel">Reconstruct PDF</span>
+            </button>
+            <button class="btn-ghost" id="resetBtn" type="button" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a8 8 0 111.6 6.4"/><path d="M4 4v6h6"/></svg>
+              Reset workspace
+            </button>
+            <div class="kbd-hint">Tip: press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to run</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="progressPanel">
+        <div class="panel-body progress-card">
+          <div class="progress-head">
+            <span class="progress-title" id="progressTitle">Idle</span>
+            <span class="progress-pct" id="progressPct">0%</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-step" id="progressStep">Load a document to begin.</div>
+          <div class="steps" id="steps">
+            <span class="step-chip" data-step="ocr">OCR</span>
+            <span class="step-chip" data-step="bg">Background</span>
+            <span class="step-chip" data-step="boxes">Color boxes</span>
+            <span class="step-chip" data-step="lines">Lines</span>
+            <span class="step-chip" data-step="text">Text</span>
+            <span class="step-chip" data-step="gfx">Graphics</span>
+            <span class="step-chip" data-step="pdf">PDF</span>
+          </div>
+        </div>
+      </section>
+    </aside>

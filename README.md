@@ -6,10 +6,12 @@ borders, cropped artwork, and *selectable, searchable* Helvetica text at the ori
 colour and weight.
 
 Everything runs in the browser tab. There is no backend, no API key, no upload and no build
-step — the whole app is one self-contained `index.html`.
+step — just static files: `index.html`, six CSS files, six HTML fragments and a set of plain
+JavaScript modules loaded with classic `<script>` tags.
 
 **[Open `index.html`](index.html)** (or serve the repo root with any static server, e.g.
-`python3 -m http.server`).
+`python3 -m http.server`). It also works straight from disk — double-clicking the file
+loads the app, because nothing uses ES modules or `fetch` against the local tree.
 
 ---
 
@@ -63,9 +65,54 @@ connection is required on first load; nothing is sent anywhere except those CDN 
 ## Project layout
 
 ```
-index.html   the entire application (HTML + CSS + JS, no build step)
+index.html   the page shell: <link>s the CSS, inlines the fragments, loads the scripts
+css/         tokens, base, layout, components, stage, responsive
+html/        markup fragments — topbar, hero, sidebar, stage, export, footer
+js/          runtime.js (the TC namespace) + one file per pipeline stage
 README.md    this file
 ```
+
+Everything is verbatim HTML/CSS/JS. There is no bundler, no transpiler and no `npm install`:
+open `index.html` and it runs. The only thing that changes load order is the `<script>` list
+at the bottom of `index.html` — `js/runtime.js` first, `js/boot.js` last.
+
+### How the JavaScript is organised
+
+`js/runtime.js` defines a single global, `TC`. Every other file registers itself onto it:
+
+```js
+TC.register(function (TC) {
+  'use strict';
+
+  function detectLines(/* … */) { /* … */ }
+
+  TC.detectLines = detectLines;      // publish what other modules may call
+});
+```
+
+Each module keeps its own scope, so helpers stay private until they are explicitly published
+onto `TC`. Cross-module calls are always written as `TC.something()`, which keeps the
+dependency visible at the call site and means load order only matters for top-level code
+(function bodies resolve when they run, so two modules may call into each other freely).
+
+The pipeline, in order of execution:
+
+| File | Responsibility |
+| --- | --- |
+| `runtime.js` | The `TC` namespace and `TC.register` |
+| `config.js` | CDN URLs, page sizes |
+| `dom.js` | `$`, `clamp`, canvas and colour helpers |
+| `state.js`, `progress.js`, `toast.js`, `theme.js`, `loader.js` | App state and UI plumbing |
+| `samples.js` | The synthetic invoice and worksheet used by the demo buttons |
+| `files.js`, `sample-load.js` | File intake (images + PDFs) and sample loading |
+| `pixels.js`, `layer1-regions.js` | Layer 1 — page background and colour regions |
+| `layer2-lines.js` | Layer 2 — structural lines, rules and table borders |
+| `layer3-text.js`, `ocr.js`, `styled-words.js` | Layer 3 — OCR, word boxes, font size/weight/colour |
+| `layer4-graphics.js` | Layer 4 — vector tracing of surviving artwork |
+| `pdf-build.js` | pdf-lib assembly: fills, rules, artwork, typed text |
+| `pipeline.js` | Orchestrates the four layers over one or more pages |
+| `preview.js`, `overlay.js`, `ui.js` | Preview panes, overlays, controls |
+| `boot.js` | Starts the app and publishes `window.Typecraft` |
 
 ## Development notes
 
@@ -73,6 +120,7 @@ The app exposes a small debug surface on `window.Typecraft`
 (`state`, `run`, `loadSample`, `reset`, `detectColorRegions`, `detectLines`,
 `samplePageBackground`, `buildStyledWords`, `assemblePdf`, `options`) plus
 `__lastRegionDebug`, `__gfxDebug` and `__drawLog` for inspecting the last run.
+`TC` itself is deliberately not attached to `window` — use the `Typecraft` handle.
 
 ## License
 

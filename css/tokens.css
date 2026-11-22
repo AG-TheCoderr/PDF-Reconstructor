@@ -1,0 +1,62 @@
+/* ============================================================================
+   Design tokens: colours, type scale, spacing, radii, motion.
+   Everything else references these, so changing a value here retunes the whole UI.
+   ========================================================================== */
+
+:root{
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --r-xs: 7px; --r-sm: 10px; --r-md: 14px; --r-lg: 20px; --r-full: 999px;
+  --ease: cubic-bezier(.22,.8,.28,1);
+  --dur: .22s;
+  --accent: #7c6cff;
+  --accent-2: #22d3ee;
+  --accent-ink: #ffffff;
+  --danger: #ff5d73;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --layer-bg: #3b82f6;
+  --layer-line: #22c55e;
+  --layer-text: #f59e0b;
+  --layer-gfx: #a855f7;
+}
+html[data-theme="dark"]{
+  --bg-0: #080a11;
+  --bg-1: #0d1019;
+  --bg-2: #121623;
+  --bg-3: #1a1f30;
+  --bg-4: #232941;
+  --line-1: rgba(148,163,214,.14);
+  --line-2: rgba(148,163,214,.24);
+  --text-1: #eef1fb;
+  --text-2: #aab3cd;
+  --text-3: #7a85a3;
+  --glass: rgba(19,23,36,.72);
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -12px rgba(0,0,0,.65);
+  --shadow-2: 0 24px 60px -24px rgba(0,0,0,.8);
+  --scroll: #2a3150;
+  --overlay-ink: #ffffff;
+  --checker-a: #141827;
+  --checker-b: #10131f;
+}
+html[data-theme="light"]{
+  --bg-0: #f3f5fb;
+  --bg-1: #ffffff;
+  --bg-2: #f7f8fd;
+  --bg-3: #eef1f9;
+  --bg-4: #e4e9f4;
+  --line-1: rgba(24,34,68,.10);
+  --line-2: rgba(24,34,68,.18);
+  --text-1: #101629;
+  --text-2: #4a5470;
+  --text-3: #77809b;
+  --glass: rgba(255,255,255,.78);
+  --shadow-1: 0 1px 2px rgba(16,24,48,.06), 0 12px 28px -18px rgba(16,24,48,.35);
+  --shadow-2: 0 24px 60px -28px rgba(16,24,48,.45);
+  --scroll: #c3cadd;
+  --overlay-ink: #0b1020;
+  --checker-a: #ffffff;
+  --checker-b: #eef1f8;
+  --accent: #5b4bff;
+  --accent-2: #0891b2;
+}
