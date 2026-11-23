@@ -108,8 +108,58 @@ function estimateFontSizePx(word) {
 function consolidateWords(words) {
   if (!words || words.length < 2) return words || [];
   const norm = (t) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+  // 0) A crop reading never overrules a whole-page reading of the same word when
+  // the two differ by a single character. Crops exist to read what the full page
+  // missed; where it missed nothing they only add the F/P, 1/l, 6/0 coin-flip,
+  // and the full page — which saw the word in its real context — is the better
+  // judge. Everything a crop adds is kept.
+  const oneCharApart = (a, b) => {
+    if (a.length !== b.length || a === b) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && ++diff > 1) return false;
+    return diff === 1;
+  };
+  const pageWords = words.filter((w) => !w.fromCrop && w.bbox);
+  if (pageWords.length) {
+    for (const w of words) {
+      if (!w.fromCrop || !w.bbox) continue;
+      const wt = norm(w.text);
+      const area = Math.max(1, (w.bbox.x1 - w.bbox.x0) * (w.bbox.y1 - w.bbox.y0));
+      for (const p of pageWords) {
+        const pt = norm(p.text);
+        if (!wt || !pt || !oneCharApart(wt, pt)) continue;
+        const ix = Math.min(w.bbox.x1, p.bbox.x1) - Math.max(w.bbox.x0, p.bbox.x0);
+        const iy = Math.min(w.bbox.y1, p.bbox.y1) - Math.max(w.bbox.y0, p.bbox.y0);
+        if (ix > 0 && iy > 0 && (ix * iy) / area > 0.55) { w.superseded = true; break; }
+      }
+    }
+  }
+
+  /* 0b) Two words run together across a column gap ("tokens" + the QTY "1" read
+   * as one "tokensl") must lose to the two clean readings. Decide this up front,
+   * because the confidence-ordered loop below only sees pairs in one direction:
+   * whichever member happens to arrive first would otherwise win. */
+  const glueVictims = new Set();
+  const byText = words.filter((w) => w.bbox && !w.superseded);
+  for (const w of byText) {
+    const wt = norm(w.text);
+    if (wt.length < 5) continue;
+    for (const k of byText) {
+      if (k === w) continue;
+      const kt = norm(k.text);
+      if (kt.length < 4 || wt.length < kt.length + 1) continue;
+      if (!wt.startsWith(kt)) continue;
+      const sameLine = Math.min(w.bbox.y1, k.bbox.y1) - Math.max(w.bbox.y0, k.bbox.y0) > (w.bbox.y1 - w.bbox.y0) * 0.5;
+      if (!sameLine || w.bbox.x0 > k.bbox.x0 + 4) continue;
+      // The clean word covers the glue's left part; the glue just adds a tail.
+      const overlap = Math.min(w.bbox.x1, k.bbox.x1) - Math.max(w.bbox.x0, k.bbox.x0);
+      if (overlap > (k.bbox.x1 - k.bbox.x0) * 0.7) { glueVictims.add(w); break; }
+    }
+  }
+
   // 1) sort by confidence so the best reading wins
-  const sorted = words.slice().sort((a, b) => (b.conf || 0) - (a.conf || 0));
+  const sorted = words.filter((w) => !w.superseded && !glueVictims.has(w))
+    .sort((a, b) => (b.conf || 0) - (a.conf || 0));
   const kept = [];
   for (const w of sorted) {
     const nb = w.bbox;
@@ -127,6 +177,14 @@ function consolidateWords(words) {
       const overlapSelf = inter / area, overlapOther = inter / kArea;
       const kn = norm(k.text);
       const sameText = nw && kn && (nw === kn || nw.includes(kn) || kn.includes(nw));
+      // A glued token: a reading that swallows an already-kept word but holds
+      // extra characters of its own is two words run together across a gap
+      // ("tokensl" = "tokens" + the adjacent "1"). Two clean readings beat one
+      // dirty one. Restricted to a *substantial* swallowed word so a stray
+      // single letter cannot evict a real reading.
+      if (nw && kn.length >= 4 && nw.length >= kn.length + 2 && nw.includes(kn)) {
+        drop = true; break;
+      }
       // Same spot: nearly identical boxes (or one nested in the other).
       if ((overlapSelf > 0.55 || overlapOther > 0.55) && (sameText || overlapSelf > 0.75 || overlapOther > 0.75)) {
         drop = true; break;
@@ -140,7 +198,33 @@ function consolidateWords(words) {
     }
     if (!drop) kept.push(w);
   }
-  return kept;
+
+  /* A capital that Tesseract split off the front of its own word — "J" + "ane" —
+   * comes back as two boxes with no word gap between them. Rejoin when the boxes
+   * are on one line, touch within a couple of pixels, and the pair reads as one
+   * capitalised word. Anything wider than that really is two words. */
+  const out = [];
+  for (const w of kept) {
+    const prev = out[out.length - 1];
+    if (prev) {
+      const h = Math.max(prev.bbox.y1 - prev.bbox.y0, w.bbox.y1 - w.bbox.y0);
+      const gap = w.bbox.x0 - prev.bbox.x1;
+      const oy = Math.min(prev.bbox.y1, w.bbox.y1) - Math.max(prev.bbox.y0, w.bbox.y0);
+      const pt = prev.text || '', wt = w.text || '';
+      if (h > 4 && oy > h * 0.6 && gap > -2 && gap <= h * 0.2 &&
+          /^[A-Z][a-z]{0,2}[.]?$/.test(pt) && /^[a-z]/.test(wt) && pt.length + wt.length >= 3) {
+        out[out.length - 1] = {
+          ...prev,
+          text: pt + wt,
+          bbox: { x0: prev.bbox.x0, y0: Math.min(prev.bbox.y0, w.bbox.y0), x1: w.bbox.x1, y1: Math.max(prev.bbox.y1, w.bbox.y1) },
+          conf: Math.min(prev.conf || 0, w.conf || 0),
+        };
+        continue;
+      }
+    }
+    out.push(w);
+  }
+  return out;
 }
 
 /**
@@ -637,10 +721,16 @@ async function assemblePdf(pages, options) {
 
   const helv = await doc.embedFont(StandardFonts.Helvetica);
   const helvB = await doc.embedFont(StandardFonts.HelveticaBold);
+  // Helvetica has no true italic in the standard 14; Oblique is the same
+  // drawing run at 12°, which is exactly what a measured slant asks for.
+  const helvO = await doc.embedFont(StandardFonts.HelveticaOblique);
+  const helvBO = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
   const widths = {
     regular: (t) => naturalWidth(helv, t),
     bold: (t) => naturalWidth(helvB, t),
   };
+  /** The face a word should be set in. */
+  const faceFor = (w) => (w.italic ? (w.bold ? helvBO : helvO) : (w.bold ? helvB : helv));
 
   const stats = { words: 0, boxes: 0, lines: 0, graphics: 0, vectorPaths: 0, graphicsFlattened: 0, chars: 0, droppedText: 0 };
   const usedGlyphs = new Set();
@@ -729,15 +819,17 @@ async function assemblePdf(pages, options) {
     for (const arr of linesMap.values()) {
       const angle = lineAngleDeg(arr);
       // One font size per text line — short words ("is", "a") have x-height-only
-      // boxes and would otherwise be over-sized.
-      const lineSizePx = estimateLineFontSizePx(arr);
+      // boxes and would otherwise be over-sized. buildStyledWords has already
+      // settled that per line from the measured band layout; fall back to the
+      // old estimate only when it is absent (defensive: rotated-crop words).
+      const lineSizePx = TC.medianOfNumbers(arr.map((w) => (w.sizePx > 0 ? w.sizePx : estimateLineFontSizePx([w]))));
       for (const w of arr) {
         const text = w.text;
         if (!text) continue;
         // Text recovered from rotated artwork carries its own angle.
         const wordAngle = (w.angleDeg !== undefined && w.angleDeg !== null) ? w.angleDeg : angle;
-        const font = w.bold ? helvB : helv;
-        const nat = (w.bold ? widths.bold : widths.regular)(text);
+        const font = faceFor(w);
+        const nat = widths[font === helvB || font === helvBO ? 'bold' : 'regular'](text);
         let size = lineSizePx * g.s;
         // 2) match the original ink span exactly via horizontal scaling
         let hScale = 1;
@@ -753,8 +845,12 @@ async function assemblePdf(pages, options) {
           hScale = TC.clamp(ratio, 0.74, 1.3);
         }
         if (!isFinite(size) || size <= 0.3) continue;
-        // 3) anchor: Tesseract's baseline when present, else the box bottom.
-        const baseY = (w.baseline && isFinite(w.baseline.y0)) ? w.baseline.y0 : (w.y + w.h);
+        // 3) anchor. Order of trust: the line's measured ink baseline (one per
+        // line, so words cannot drift up and down), then Tesseract's baseline,
+        // then the box bottom.
+        const baseY = (w.baselineY !== undefined && isFinite(w.baselineY))
+          ? w.baselineY
+          : (w.baseline && isFinite(w.baseline.y0)) ? w.baseline.y0 : (w.y + w.h);
         // 4) optical alignment: pull left by the left side bearing of the first glyph
         const bearing = leftBearing(font, text) * size;
         let xPt = pxToPtX(g, w.x) - bearing;

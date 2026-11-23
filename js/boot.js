@@ -35,6 +35,21 @@ window.Typecraft = {
   ocrRotatedCrop: TC.ocrRotatedCrop,
   vectoriseCrop: TC.vectoriseCrop,
   traceMask: TC.traceMask,
+  // Layer internals, exposed for diagnostics and automated checks.
+  detectGraphics: TC.detectGraphics,
+  cleanCropAgainstVectors: TC.cleanCropAgainstVectors,
+  restoreCropAlpha: TC.restoreCropAlpha,
+  buildStyledWordsFull: TC.buildStyledWords,
+  runOcrPasses: TC.runOcrPasses,
+  chooseOcrScale: TC.chooseOcrScale,
+  medianLineHeight: TC.medianLineHeight,
+  poolSize: TC.poolSize,
+  ensureWorkerPool: TC.ensureWorkerPool,
+  fillBeneathWord: TC.fillBeneathWord,
+  analyzeTextPixels: TC.analyzeTextPixels,
+  colorDist2: TC.colorDist2,
+  colorfulness: TC.colorfulness,
+  lumOf: TC.lumOf,
 };
 
   // --- exported onto TC ---

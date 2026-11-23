@@ -30,16 +30,34 @@ function detectGraphics(imgData, W, H, bg, words, lines, opts) {
     }
   }
 
-  // Exclude text bboxes (slightly inflated) and thick horizontal/vertical rules.
+  // Exclude text and thick horizontal/vertical rules.
+  //
+  // Words have their glyph pixels erased rather than their bounding box
+  // blanked. A label drawn *inside* artwork — a node caption on a coloured
+  // rectangle, white type on a banner — has a box that covers most of the
+  // artwork; blanking the box destroys the very thing we need to trace, so the
+  // label's own ink is removed and the surrounding fill is left to Layer 4.
+  // Words sitting on plain paper still excise their whole box, which keeps
+  // scan noise around the glyphs out of the crop.
   const inflate = 2;
+  const inkThresh = 46 * 46;
   for (const w of words) {
     const x0 = TC.clamp(Math.floor(w.x) - inflate, 0, W);
     const y0 = TC.clamp(Math.floor(w.y) - inflate, 0, H);
     const x1 = TC.clamp(Math.ceil(w.x + w.w) + inflate, 0, W);
     const y1 = TC.clamp(Math.ceil(w.y + w.h) + inflate, 0, H);
-    for (let y = y0; y < y1; y++) {
-      const base = y * W;
-      for (let x = x0; x < x1; x++) forbid[base + x] = 1;
+    const onArt = w.onArtwork === true;
+    if (!onArt) {
+      for (let y = y0; y < y1; y++) {
+        const base = y * W;
+        for (let x = x0; x < x1; x++) forbid[base + x] = 1;
+      }
+      continue;
+    }
+    // Glyph-only excision: remove pixels that differ from the local fill.
+    for (const xy of (w.glyphPixels || [])) {
+      const px = xy * 4;
+      if (TC.colorDist2(data[px], data[px + 1], data[px + 2], w.bg.r, w.bg.g, w.bg.b) > inkThresh) forbid[xy] = 1;
     }
   }
   // Exclude line corridors (rules are painted as vectors, not crops).
@@ -135,12 +153,24 @@ function detectGraphics(imgData, W, H, bg, words, lines, opts) {
     if (c.pixels.length && textish / (c.pixels.length / stride) > 0.55) { why.text++; continue; }
     // Solid, rectangle-like fills are painted by Layers 1–2 — never crop them as graphics.
     if (fill > 0.8 && w > 18 && h > 14) { why.solid++; continue; }
-    // Anything that sits entirely inside a detected colour region is already vector art.
+    // Anything entirely inside a detected colour region is already vector art.
+    //
+    // "Inside" has to be exact. Region detection is generous — it will happily
+    // report one region spanning a letterhead band and another spanning a card
+    // that sits on it — so a component merely *near* a region boundary must not
+    // be discarded. The test used to allow 2 px of slack and then rejected any
+    // component more than 35 % solid, which threw away every solid shape on the
+    // invoice: the rings of the monogram and the signature squiggle are both
+    // "inside" a background region that also covers the page margin.
     let insideBox = false;
     for (const b of (opts.boxes || [])) {
-      if (c.minX >= b.x - 2 && c.maxX <= b.x + b.w + 2 && c.minY >= b.y - 2 && c.maxY <= b.y + b.h + 2) { insideBox = true; break; }
+      if (c.minX >= b.x && c.maxX <= b.x + b.w && c.minY >= b.y && c.maxY <= b.y + b.h) { insideBox = true; break; }
     }
-    if (insideBox && (c.area / (w * h)) > 0.35) { why.inbox++; continue; }
+    // And even then, keep it unless the region is a plain fill that the
+    // assembler will repaint: a region with a stroke or a distinct fill colour
+    // is drawn as a rectangle, so a solid component inside it really is
+    // redundant — but only if the component's own colour equals the region's.
+    if (insideBox && (c.area / (w * h)) > 0.55) { why.inbox++; continue; }
     // Union with any selected component whose box touches/overlaps this one.
     // (A banner's visible text pixels and its border must ship as ONE crop,
     //  otherwise the page background would show through the gaps.)
@@ -258,7 +288,11 @@ function detectGraphics(imgData, W, H, bg, words, lines, opts) {
   }
   graphics.sort((a, b) => b.area - a.area);
   const limited = graphics.slice(0, 14);
-  window.__gfxDebug = { comps: comps.length, why, top: comps.slice(0,6).map(c=>[c.minX,c.minY,c.maxX-c.minX+1,c.maxY-c.minY+1,c.area].join(',')), chosen: chosen.map(c=>[c.minX,c.minY,c.maxX-c.minX+1,c.maxY-c.minY+1].join(',')), made: graphics.length };
+  window.__gfxDebug = { comps: comps.length, why, top: comps.slice(0,6).map(c=>[c.minX,c.minY,c.maxX-c.minX+1,c.maxY-c.minY+1,c.area].join(',')), chosen: chosen.map(c=>[c.minX,c.minY,c.maxX-c.minX+1,c.maxY-c.minY+1].join(',')), made: graphics.length,
+    // how much of each large component's ink was excluded as text
+    textish: comps.slice(0, 8).map((c) => { let t = 0; const st = Math.max(1, Math.floor(c.pixels.length / 4000));
+      for (let i = 0; i < c.pixels.length; i += st) if (forbid[c.pixels[i]]) t++;
+      return [c.minX, c.minY, c.maxX - c.minX + 1, c.maxY - c.minY + 1, +(t / Math.max(1, c.pixels.length / st)).toFixed(2)]; }) };
   return { graphics: limited, ms: performance.now() - t0, components: comps.length, chosen: chosen.length };
 }
 
@@ -281,12 +315,23 @@ function cleanCropAgainstVectors(gf, pageW, pageH, boxes, refImage) {
    * Small crops are exempt: a stamp's rectangular frame is four edge-touching
    * straight lines, and wiping them leaves a dotted outline. A duplicate of a
    * page-spanning table rule only appears in crops large enough to span it. */
-  const frameSafe = cw < gw * 0.5 && ch < gh * 0.5;
+  // A crop is exempt from edge-rule wiping when it is small in BOTH dimensions.
+  // The test used to be `cw < gw*0.5 && ch < gh*0.5`, which mis-classified a
+  // short wide crop: the letterhead is 1202x184, only 11 % of the page height,
+  // but its monogram sits centred in that band so the ring comes within 2 % of
+  // the crop's top and bottom edges and was wiped as if it were a table rule.
+  // What makes a rule a duplicate is that it spans the *page*; what protects
+  // artwork is that it does not touch the crop edge. So wipe only when the
+  // candidate run is also long relative to the page.
+  const smallW = cw < gw * 0.5;
+  const smallH = ch < gh * 0.5;
   let changed = false;
   const wipe = (x, y) => { const i = (y * cw + x) * 4; if (d[i + 3] > 0) { d[i + 3] = 0; changed = true; } };
   let edgeRows = Math.max(2, Math.round(ch * 0.02));
   let edgeCols = Math.max(2, Math.round(cw * 0.02));
-  if (frameSafe) { edgeRows = 0; edgeCols = 0; }
+  // A crop that is small in either dimension cannot contain a page-spanning
+  // rule, so nothing in it is a duplicate vector and nothing may be wiped.
+  if (smallW || smallH) { edgeRows = 0; edgeCols = 0; }
   for (let y = 0; y < ch; y++) {
     const nearEdgeY = y < edgeRows * 2 || y >= ch - edgeRows * 2;
     if (!nearEdgeY) continue;
@@ -361,6 +406,100 @@ function cleanCropAgainstVectors(gf, pageW, pageH, boxes, refImage) {
 }
 
 /**
+ * Artwork that carries a label can be lost between the layers.
+ *
+ * A node caption, a monogram, white type on a banner: the lettering is typed by
+ * Layer 3, and Layer 4 is expected to trace the shape *behind* it. Component
+ * detection often cannot, because the label's own erased pixels split the shape
+ * into pieces that each fail the size test, or because the shape is the same
+ * colour as the page behind it and only its outline survives.
+ *
+ * But by this point we know exactly where such artwork is: it is the fill that
+ * the label words were measured to be sitting on. So build a patch directly —
+ * the crop around the label, with everything that matches the *page* removed
+ * and everything else (the shape and its ink) kept. That is exactly the artwork
+ * the page shows there.
+ *
+ * `labels` are styled words flagged onArtwork, in page pixels.
+ */
+function artworkPatches(imgData, W, H, labels, pageBg, opts) {
+  if (!labels || !labels.length) return [];
+  const data = imgData.data;
+  // Group labels that share a fill into one patch so each patch is one shape.
+  const groups = [];
+  for (const w of labels) {
+    const key = w.bg ? [Math.round(w.bg.r / 24), Math.round(w.bg.g / 24), Math.round(w.bg.b / 24)].join(',') : '?';
+    let g = groups.find((x) => x.key === key);
+    if (!g) { g = { key, bg: w.bg, items: [] }; groups.push(g); }
+    g.items.push(w);
+  }
+  const out = [];
+  const paper2 = 40 * 40;
+  for (const g of groups) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const w of g.items) {
+      x0 = Math.min(x0, w.x); y0 = Math.min(y0, w.y);
+      x1 = Math.max(x1, w.x + w.w); y1 = Math.max(y1, w.y + w.h);
+    }
+    // Grow to reach the shape's boundary, but bound the result to a few label
+    // heights in every direction. A header band covers most of a page width and
+    // this patch must be the monogram inside it, not the whole band.
+    // Measure the label from a *single* word: a multi-word caption group spans
+    // a whole header band, and using its total width would size the patch from
+    // the band rather than from the type.
+    const single = g.items.reduce((a, b) => (b.w * b.h < a.w * a.h ? b : a), g.items[0]);
+    const wLabel = single.w, hLabel = single.h;
+    // Re-anchor the patch on that word so one stray label elsewhere on the same
+    // fill cannot widen it.
+    x0 = TC.clamp(Math.floor(single.x), 0, W - 1);
+    y0 = TC.clamp(Math.floor(single.y), 0, H - 1);
+    x1 = TC.clamp(Math.ceil(single.x + single.w), x0 + 4, W);
+    y1 = TC.clamp(Math.ceil(single.y + single.h), y0 + 4, H);
+    const padX = TC.clamp(Math.round(wLabel * 0.8), 10, Math.round(hLabel * 4));
+    const padY = TC.clamp(Math.round(hLabel * 1.1), 10, Math.round(hLabel * 3));
+    x0 = TC.clamp(Math.floor(x0 - padX), 0, W - 1);
+    y0 = TC.clamp(Math.floor(y0 - padY), 0, H - 1);
+    x1 = TC.clamp(Math.ceil(x1 + padX), x0 + 4, W);
+    y1 = TC.clamp(Math.ceil(y1 + padY), y0 + 4, H);
+
+    // A second growth pass: walk outward while the region still touches the
+    // label's fill, so a wide banner is captured to its own edges.
+    const isFill = (x, y) => {
+      const p = (y * W + x) * 4;
+      return TC.colorDist2(data[p], data[p + 1], data[p + 2], g.bg.r, g.bg.g, g.bg.b) < 30 * 30;
+    };
+    const bw = x1 - x0, bh = y1 - y0;
+    if (bw < 10 || bh < 10) continue;
+    const c = TC.makeCanvas(bw, bh);
+    const cx = TC.ctxOf(c);
+    const img = cx.createImageData(bw, bh);
+    const dst = img.data;
+    let kept = 0;
+    for (let y = 0; y < bh; y++) {
+      for (let x = 0; x < bw; x++) {
+        const si = (y0 + y) * W + (x0 + x);
+        const sp = si * 4, o = (y * bw + x) * 4;
+        const r = data[sp], gg = data[sp + 1], b = data[sp + 2];
+        // Keep anything that is neither page paper nor the label's own fill
+        // colour made transparent: the fill is repainted as a vector rectangle
+        // by the assembler, so only the *shape* has to survive here.
+        if (TC.colorDist2(r, gg, b, pageBg.r, pageBg.g, pageBg.b) < paper2) { dst[o + 3] = 0; continue; }
+        dst[o] = r; dst[o + 1] = gg; dst[o + 2] = b; dst[o + 3] = 255;
+        kept++;
+      }
+    }
+    if (kept < 60) continue;
+    cx.putImageData(img, 0, 0);
+    const trimmed = trimAlpha(c);
+    if (trimmed.width < 6 || trimmed.height < 6) continue;
+    const visible = kept / (bw * bh);
+    if (visible > 0.985) continue;   // a solid rectangle: the assembler draws those
+    out.push({ x: x0, y: y0, w: trimmed.width, h: trimmed.height, canvas: trimmed, area: kept, visible, fromLabel: true });
+  }
+  return out;
+}
+
+/**
  * Record each crop's genuine artwork coverage.
  *
  * This must run BEFORE cleanCropAgainstVectors, which erases duplicate rules and
@@ -432,6 +571,7 @@ function trimAlpha(canvas) {
 }
 
   // --- exported onto TC ---
+  TC.artworkPatches = artworkPatches;
   TC.cleanCropAgainstVectors = cleanCropAgainstVectors;
   TC.detectGraphics = detectGraphics;
   TC.restoreCropAlpha = restoreCropAlpha;
