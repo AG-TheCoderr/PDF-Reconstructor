@@ -92,6 +92,14 @@ function buildBackgroundReference(W, H, pageBg, boxes) {
   x.fillRect(0, 0, W, H);
   const ordered = boxes.slice().sort((a, b) => b.area - a.area);
   for (const b of ordered) {
+    // A box covering part of the page is only an *approximation* of the fill
+    // under it, and this reference is what every later layer compares against.
+    // Painting it in its dominant colour is right for a flat panel; for a box
+    // that spans a letterhead and the paper below it, painting one flat colour
+    // invents a boundary that does not exist and hides real artwork. So the
+    // reference is painted only where the box actually is uniform, which is
+    // the common case and the only case where painting helps.
+    if (b.area && b.area < b.w * b.h * 0.62) continue;
     x.fillStyle = b.hex;
     x.fillRect(b.x, b.y, b.w, b.h);
   }
@@ -113,7 +121,14 @@ function buildInkMask(data, ref, total, tol) {
   TC.buildBackgroundReference = buildBackgroundReference;
   TC.buildInkMask = buildInkMask;
   TC.colorDist = colorDist;
+/** Saturation of a colour, 0 for grey and 1 for a fully saturated hue. */
+function colorfulness(c) {
+  const mx = Math.max(c.r, c.g, c.b), mn = Math.min(c.r, c.g, c.b);
+  return mx <= 0 ? 0 : (mx - mn) / mx;
+}
+
   TC.colorDist2 = colorDist2;
+  TC.colorfulness = colorfulness;
   TC.dominantColor = dominantColor;
   TC.lumOf = lumOf;
   TC.medianOfNumbers = medianOfNumbers;
