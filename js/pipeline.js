@@ -232,6 +232,22 @@ function dropTallFragments(words) {
       const { boxes, lines, refImg } = perPageStructural[pi];
       perPageRaw[pi] = dropTallFragments(TC.consolidateWords(perPageRaw[pi]));
       const styled = TC.buildStyledWords(perPageRaw[pi], d.data, d.W, d.H, d.bg, { ...opts, boxes });
+
+      /* -------- character-level verification ------------------------------
+       * The last look at every uncertain reading, at the level where the
+       * remaining errors live: individual letters. Tesseract reads "PDF" as
+       * "POF" with 99/97/98 per-character confidence, so no confidence rule can
+       * catch it, and re-reading the word bigger does not help either. What
+       * does work is comparing the letter's actual ink against the same letter
+       * rendered at the same size; the pass derives its own per-character boxes
+       * from that ink, because Tesseract's symbol boxes do not address the page
+       * raster. See js/glyphs.js. */
+      if (opts.templates !== false && TC.verifyPageTemplates) {
+        try {
+          TC.verifyPageTemplates(styled.words, d.data, d.W, d.H, d.bg, {});
+        } catch (err) { console.warn('template verification failed', err); }
+      }
+
       TC.state.lastStyled = styled;
       TC.progress.set(60 + ((pi + 0.35) / TC.state.pages.length) * 22, `Layer 3 · Styled ${styled.words.length} words — page ${pi + 1}/${TC.state.pages.length}`);
       await TC.nextFrame();
@@ -1180,7 +1196,16 @@ async function fillOcrGaps(pageData, rawWords, opts) {
                 x1: base.x1 / scale, y1: base.y1 / scale + b.y0, has_baseline: true,
               } : null,
               rowAttributes: ra,
-              symbols: word.symbols || [],
+              // Symbol boxes come back in crop pixels and must be mapped to
+              // page pixels like the word box above, or the character-level
+              // pass would look at the wrong ink entirely.
+              symbols: (word.symbols || []).map((sy) => ({
+                ...sy,
+                bbox: sy.bbox ? {
+                  x0: sy.bbox.x0 / scale, y0: sy.bbox.y0 / scale + b.y0,
+                  x1: sy.bbox.x1 / scale, y1: sy.bbox.y1 / scale + b.y0,
+                } : sy.bbox,
+              })),
             });
           }
         }

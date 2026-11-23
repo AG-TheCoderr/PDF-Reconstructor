@@ -50,6 +50,19 @@ window.Typecraft = {
   colorDist2: TC.colorDist2,
   colorfulness: TC.colorfulness,
   lumOf: TC.lumOf,
+  // Character-level template verification, exposed for direct testing.
+  verifyPageTemplates: TC.verifyPageTemplates,
+  verifyWordTemplates: TC.verifyWordTemplates,
+  classifyGlyph: TC.classifyGlyph,
+  correlate: TC.correlate,
+  coverageGrid: TC.coverageGrid,
+  inkProbe: TC.inkProbe,
+  inkBox: TC.inkBox,
+  referenceFor: TC.referenceFor,
+  glyphBoxes: TC.glyphBoxes,
+  boxOf: TC.boxOf,
+  CONFUSABLE: TC.CONFUSABLE,
+  localBg: TC.localBg,
 };
 
   // --- exported onto TC ---

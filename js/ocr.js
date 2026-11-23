@@ -21,6 +21,21 @@
 
      · The 4.0.0_best_int model is used when available. It is ~3 MB rather
        than ~10 MB (best) or ~1 MB (fast) and measured equal to best here.
+
+     · Some single-character confusions are *confidently* wrong and cannot be
+       fixed downstream. "PDF" comes back "POF" with P 99 %, O 97 %, F 98 %, so
+       no confidence rule can see it, and re-reading the isolated word at 4x
+       does not help either — measured results were "PD", "PDA", "PC" and "POF".
+       Tesseract's own `symbols` report per-character boxes but no alternates
+       for these (choices are empty), so there is no second opinion to weigh.
+
+       Character-level geometry was tried as a fix and rejected on evidence:
+       across 378 glyphs in 14 faces, a "flat left edge plus flat top" test for
+       D fired on 38 non-D glyphs (B, R, K, M, N, H, E — every stem-plus-bar
+       letter) and the reciprocal O test on 128. Shape tests can tell "has a
+       vertical stem", not "is a D". Below 14 px even that much collapses. The
+       remaining productive lever is a better raster or a second engine, not
+       more inspection of the same pixels.
    ========================================================================== */
 
 TC.register(function (TC) {
@@ -289,6 +304,14 @@ function rescaleWord(w, k) {
     ...w,
     bbox: sb(w.bbox),
     lineBbox: w.lineBbox ? sb(w.lineBbox) : w.lineBbox,
+    // Per-character boxes must be rescaled too. They are what the character
+    // level pass uses to find each glyph's own ink, and a symbol box left in
+    // raster pixels while its word is in page pixels points at the wrong part
+    // of the page — which silently disabled every template comparison.
+    symbols: (w.symbols || []).map((sy) => (sy && sy.bbox
+      ? { ...sy, bbox: sb(sy.bbox) }
+      : sy)),
+    baseline: w.baseline && w.baseline.has_baseline !== false ? sb(w.baseline) : w.baseline,
   };
 }
 
@@ -307,6 +330,20 @@ function looksLikeWord(text) {
   // mix — OCR tends to produce consonant soup when it mis-segments.
   if (!/[A-Za-z]/.test(t)) return false;
   return true;
+}
+
+/**
+ * Do two readings of the same spot differ by exactly one character of the same
+ * length — the signature of a glyph-shape confusion rather than one pass
+ * reading a genuinely different word?
+ */
+function sameShapeDisagreement(a, b) {
+  const x = (a || '').trim(), y = (b || '').trim();
+  if (!x || !y || x.length !== y.length || x.length < 2) return false;
+  if (x.toLowerCase() === y.toLowerCase()) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i] && ++diff > 1) return false;
+  return diff === 1;
 }
 
 function mergeWordPasses(primary, secondary) {
@@ -334,7 +371,22 @@ function mergeWordPasses(primary, secondary) {
         // is the better reading on average. A later pass may only replace it when
         // it is much more confident — otherwise single characters flip
         // ("PDF" -> "POF") on nothing more than a confidence point.
-        if ((w.conf || 0) > (p.conf || 0) + 15) { p.text = w.text; p.conf = w.conf; }
+        /* A reading that carries per-character boxes can be verified against
+         * the page's own glyph shapes; one that does not cannot. When the two
+         * disagree by a single character and only one of them is verifiable,
+         * the sibling check below is the right tie-break, so defer. */
+        if ((w.conf || 0) > (p.conf || 0) + 15) { p.text = w.text; p.conf = w.conf; if (w.symbols) p.symbols = w.symbols; }
+        /* Two passes disagreeing by a single character is the classic
+         * letter-shape confusion (D/O, F/P, 1/l, 6/0), and on it the *more*
+         * confident reading is not the trustworthy one. Measured on the invoice:
+         * the 2.75x pass reads "POF" at 70 % and the 1.71x pass reads "PDF" at
+         * 64 %, and the page really says PDF. A misread D->O is cheap for the
+         * LSTM (the two shapes are nearly identical at 13 px) so it scores high,
+         * while the correct reading is the rarer one. Keep the first pass's
+         * answer; do not let a confidence margin of a few points flip it. */
+        else if (sameShapeDisagreement(p.text, w.text)) {
+          // Deliberately nothing: the earlier pass keeps the character.
+        }
         // A later pass that reads a real word where the first pass read a
         // fragment is an improvement even at equal confidence: "6" for "6."
         // and "1" for "l" are the same shape, while "print-ready" for ".i" is
