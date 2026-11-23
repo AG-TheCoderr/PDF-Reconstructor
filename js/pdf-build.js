@@ -157,7 +157,9 @@ function consolidateWords(words) {
     }
   }
 
-  // 1) sort by confidence so the best reading wins
+  // 1) sort by confidence so the best reading wins. Arbitration between two
+  // readings of the same spot happens by measurement downstream (the template
+  // pass), not by preferring whichever reading happens to carry extra fields.
   const sorted = words.filter((w) => !w.superseded && !glueVictims.has(w))
     .sort((a, b) => (b.conf || 0) - (a.conf || 0));
   const kept = [];
