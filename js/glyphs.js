@@ -353,10 +353,27 @@ TC.register(function (TC) {
     const cuts = [0, ...mids, WC];
 
     const out = [];
+    const cellPitch = WC / count;
     for (let i = 0; i < count; i++) {
       const cb = inkBox(ink, b.x0 + cuts[i], b.y0, b.x0 + cuts[i + 1] - 1, b.y1);
       if (!cb || cb.w < 2 || cb.h < 6) return null;
-      out.push({ x0: cb.x0, y0: cb.y0, x1: cb.x1, y1: cb.y1 });
+      /* Flag cells the segmentation had to shave, instead of trusting them.
+       *
+       * When a boundary lands inside a glyph the survivor is a fragment — no
+       * counter, no symmetry — and a fragment is exactly the kind of ink that
+       * matches the wrong letter with a confident margin. Measured on the
+       * invoice: "AMOUNT" in the table header has a wide M and a wide O, so even
+       * spacing puts that boundary ~10 px inside the O, and what reaches the
+       * matcher is a 6 px stub. The stub reads as D at 0.61 vs O at 0.33 and
+       * rewrote a *correct* word to "AMDUNT" on every run.
+       *
+       * The cell is still returned rather than dropping the word — "INVOICE"
+       * has a legitimate 7 px I against a 17.7 px pitch, so narrow is not the
+       * same as broken. It is flagged, and verifyWord will not act on a flagged
+       * cell. Every correction the pass has ever made on the samples came from a
+       * cell comfortably over half a pitch. */
+      const flagged = cb.w < cellPitch * 0.5 || cb.w > cellPitch * 2.4;
+      out.push({ x0: cb.x0, y0: cb.y0, x1: cb.x1, y1: cb.y1, flagged });
     }
     return out;
   }
@@ -512,6 +529,8 @@ TC.register(function (TC) {
       const ch = chars[i];
       const cands = CONFUSABLE[ch];
       if (!cands || cands.length < 2) continue;
+      // A cell the segmentation had to shave is not evidence about its letter.
+      if (boxes[i].flagged) continue;
       const res = classifyGlyph(ink, boxes[i], cands, weight);
       if (!res) continue;
       // A degenerate reference scores -1 and would win every margin by default.
